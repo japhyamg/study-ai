@@ -10,14 +10,14 @@
     {{-- Analytics stat cards --}}
     <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
         @foreach([
-            ['totalTeachers', 'Teachers', 'bg-paper border border-line'],
-            ['totalStudents', 'Students', 'bg-paper border border-line'],
-            ['avgScore', 'Avg Score', 'bg-paper border border-line'],
-            ['passRate', 'Pass Rate', 'bg-paper border border-line'],
-        ] as [$key, $label, $bg])
-            <div class="{{ $bg }}" style="padding:1.25rem">
-                <div class="text-sm text-muted">{{ $label }}</div>
-                <div class="text-3xl font-bold text-ink mt-1" style="font-family: var(--font-display)">
+            ['totalTeachers', 'Teachers'],
+            ['totalStudents', 'Students'],
+            ['avgScore', 'Avg Score'],
+            ['passRate', 'Pass Rate'],
+        ] as [$key, $label])
+            <div class="stat">
+                <div class="stat-label">{{ $label }}</div>
+                <div class="stat-value">
                     @if($key === 'avgScore'){{ $analyticsStats[$key] }}%
                     @elseif($key === 'passRate'){{ $analyticsStats[$key] }}%
                     @else{{ $analyticsStats[$key] }}
@@ -50,7 +50,7 @@
         @if(empty($topSchools))
             <div class="px-5 py-12 text-center text-faint">No data yet</div>
         @else
-            <table class="w-full text-sm">
+            <div class="table-wrap"><table class="w-full text-sm">
                 <thead class="text-left text-muted border-b">
                     <tr><th class="px-5 py-2">#</th><th class="px-5 py-2">School</th><th class="px-5 py-2 text-right">Attempts</th></tr>
                 </thead>
@@ -63,7 +63,7 @@
                         </tr>
                     @endforeach
                 </tbody>
-            </table>
+            </table></div>
         @endif
     </div>
 </div>

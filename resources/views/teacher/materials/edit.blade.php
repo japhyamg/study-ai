@@ -6,7 +6,7 @@
 
     <form method="POST" action="{{ route('teacher.materials.update', $material) }}" class="surface p-5 space-y-4 max-w-2xl">
         @csrf @method('PUT')
-        <div class="grid grid-cols-2 gap-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
                 <label class="text-sm font-medium">Class</label>
                 <select name="class_id" class="w-full border rounded px-2 py-1 text-sm">

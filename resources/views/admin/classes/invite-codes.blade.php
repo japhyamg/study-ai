@@ -8,7 +8,7 @@
                 <button class="px-3 py-1 btn btn-primary text-sm">Generate</button>
             </form>
         </div>
-        <table class="w-full text-sm">
+        <div class="table-wrap"><table class="w-full text-sm">
             <thead class="text-left text-muted border-b">
                 <tr><th class="px-5 py-2">Code</th><th class="px-5 py-2">Uses</th><th class="px-5 py-2">Max</th><th class="px-5 py-2">Expires</th></tr>
             </thead>
@@ -24,6 +24,6 @@
                     <tr><td colspan="4" class="px-5 py-4 text-faint">No invite codes yet.</td></tr>
                 @endforelse
             </tbody>
-        </table>
+        </table></div>
     </div>
 </x-layouts.studyai>

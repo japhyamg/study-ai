@@ -47,7 +47,7 @@
     {{-- Overview --}}
     @if($tab === 'overview')
     <div data-tab-panel="overview">
-        <div class="grid grid-cols-3 gap-4 mb-5">
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-5">
             <div class="surface p-4 text-center">
                 <div class="font-display text-2xl text-ink">{{ $material->flashcards->count() }}</div>
                 <div class="text-xs text-faint">Flashcards</div>

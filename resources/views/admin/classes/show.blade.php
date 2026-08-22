@@ -1,10 +1,10 @@
 <x-layouts.studyai title="Class: {{ $class->name }}">
-    <div class="mb-4 flex gap-2">
-        <a href="{{ route('admin.classes.edit', $class) }}" class="px-3 py-1 btn btn-primary text-sm">Edit</a>
-        <a href="{{ route('admin.classes.invite-codes', $class) }}" class="px-3 py-1 bg-paper-sunk rounded text-sm">Invite Codes</a>
+    <div class="mb-4 flex flex-wrap gap-2">
+        <a href="{{ route('admin.classes.edit', $class) }}" class="btn btn-primary btn-sm">Edit</a>
+        <a href="{{ route('admin.classes.invite-codes', $class) }}" class="btn btn-outline btn-sm">Invite codes</a>
         <form method="POST" action="{{ route('admin.classes.destroy', $class) }}" onsubmit="return confirm('Delete this class?')">
             @csrf @method('DELETE')
-            <button class="px-3 py-1 bg-red-600 text-white rounded text-sm">Delete</button>
+            <button class="btn btn-danger btn-sm">Delete</button>
         </form>
     </div>
 
@@ -19,7 +19,7 @@
                 @csrf @method('PUT')
                 <select name="teacher_id" class="border rounded px-2 py-1 text-sm">
                     <option value="">—</option>
-                    @foreach($class->school->members()->where('role','teacher')->with('user')->get() as $m)
+                    @foreach($class->school->teachers()->with('user')->get() as $m)
                         <option value="{{ $m->user_id }}" {{ $class->teacher_id == $m->user_id ? 'selected' : '' }}>{{ $m->user?->name }}</option>
                     @endforeach
                 </select>
@@ -33,7 +33,7 @@
                 @csrf
                 <select name="user_id" class="flex-1 border rounded px-2 py-1 text-sm">
                     <option value="">Enroll a member...</option>
-                    @foreach($class->school->members()->where('role','student')->with('user')->get() as $m)
+                    @foreach($class->school->students()->with('user')->orderBy('created_at')->get() as $m)
                         <option value="{{ $m->user_id }}">{{ $m->user?->name }} ({{ $m->user?->email }})</option>
                     @endforeach
                 </select>

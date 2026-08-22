@@ -2,7 +2,7 @@
     <a href="{{ route('teacher.exams.show', $exam) }}" class="text-xs text-accent">← Back</a>
     <h2 class="font-semibold text-ink mt-2">Analytics: {{ $exam->title }}</h2>
 
-    <div class="grid grid-cols-3 gap-4 mt-4">
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-4">
         <div class="surface p-4"><div class="text-xs text-faint">Average score</div><div class="text-2xl font-semibold">{{ number_format($avg, 1) }}%</div></div>
         <div class="surface p-4"><div class="text-xs text-faint">Pass rate</div><div class="text-2xl font-semibold">{{ $total > 0 ? number_format($passRate / $total * 100, 1) : 0 }}%</div></div>
         <div class="surface p-4"><div class="text-xs text-faint">Attempts</div><div class="text-2xl font-semibold">{{ $total }}</div></div>
@@ -10,7 +10,7 @@
 
     <div class="surface mt-4">
         <div class="px-5 py-3 border-b font-semibold text-ink">Attempts</div>
-        <table class="w-full text-sm">
+        <div class="table-wrap"><table class="w-full text-sm">
             <thead class="bg-paper-sunk text-left text-muted">
                 <tr><th class="px-4 py-2">Student</th><th class="px-4 py-2">Score</th><th class="px-4 py-2">%</th><th class="px-4 py-2">Result</th><th class="px-4 py-2">Date</th></tr>
             </thead>
@@ -27,7 +27,7 @@
                     <tr><td colspan="5" class="px-4 py-6 text-center text-faint">No attempts yet.</td></tr>
                 @endforelse
             </tbody>
-        </table>
+        </table></div>
     </div>
     {{ $attempts->links() }}
 </x-layouts.studyai>

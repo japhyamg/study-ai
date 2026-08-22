@@ -1,11 +1,11 @@
-<x-layouts.studyai title="Super Admin Dashboard">
+<x-layouts.studyai title="Platform" subtitle="Super admin · main domain">
     <div class="surface">
         <div class="px-5 py-4 border-b flex items-center justify-between">
-            <div class="flex items-center gap-2">
-                <span class="text-accent text-xl">🛡️</span>
-                <span class="font-semibold text-ink">Super Admin Dashboard</span>
+            <div class="flex items-center gap-2.5">
+                <x-ui.icon name="shield" class="w-5 h-5" style="color:var(--accent)"/>
+                <span class="font-semibold text-ink">Platform management</span>
             </div>
-            <span class="text-sm text-muted">Platform Management</span>
+            <span class="text-sm text-muted hidden sm:inline">Super admin · main domain</span>
         </div>
 
         {{-- Tab nav (query-param driven; links work without JS) --}}
@@ -26,7 +26,7 @@
                 @php $active = $id === $activeTab; @endphp
                 <a href="{{ route('super-admin.dashboard') }}?tab={{ $id }}"
                    class="tab-link flex-shrink-0 flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 whitespace-nowrap transition-colors {{ $active ? 'border-accent text-ink' : 'border-transparent text-muted hover:text-ink' }}">
-                    <span class="text-base">{{ $emoji ?? '' }}</span>{{ $label }}
+                    {{ $label }}
                 </a>
             @endforeach
         </nav>

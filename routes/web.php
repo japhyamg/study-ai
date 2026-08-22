@@ -1,19 +1,38 @@
 <?php
 
 use App\Http\Controllers\AdminController;
+use App\Http\Controllers\Auth\TwoFactorChallengeController;
 use App\Http\Controllers\MaterialController;
 use App\Http\Controllers\OnboardingController;
+use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\StudentController;
 use App\Http\Controllers\SuperAdminController;
 use App\Http\Controllers\TeacherController;
 use App\Http\Controllers\TopicController;
-use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\TwoFactorController;
+use App\Models\User;
 use Illuminate\Support\Facades\Auth;
-use App\Models\SchoolMember;
+use Illuminate\Support\Facades\Route;
 
 require __DIR__.'/auth.php';
 
-// Root → role-based dashboard
+/*
+|--------------------------------------------------------------------------
+| Route map (SaaS tenancy)
+|--------------------------------------------------------------------------
+|
+|  MAIN DOMAIN (central)                     SCHOOL SUBDOMAIN ({slug}.domain)
+|  ├─ /login, /register (shared)             ├─ /login, /register (scoped to the school)
+|  ├─ /super-admin/*  (platform only)        ├─ /admin/*, /teacher/*, /student/*
+|  ├─ /onboarding (create/join a school)     ├─ /profile, /two-factor/*
+|  └─ /profile, /two-factor/*                └─ /dashboard → role dispatch
+|
+|  School users signing in on the main domain are redirected to their
+|  school's subdomain automatically (when APP_CENTRAL_DOMAINS is set).
+|  In local development everything also works path-based on localhost.
+|
+*/
+
 Route::redirect('/', '/dashboard');
 
 // Role-based home dispatch
@@ -22,16 +41,26 @@ Route::get('/dashboard', function () {
     if (! $user) {
         return redirect()->route('login');
     }
+
     return match ($user->highestRole()) {
-        SchoolMember::ROLE_SUPER_ADMIN => redirect()->route('super-admin.dashboard'),
-        SchoolMember::ROLE_ADMIN => redirect()->route('admin.dashboard'),
-        SchoolMember::ROLE_TEACHER => redirect()->route('teacher.dashboard'),
-        SchoolMember::ROLE_STUDENT => redirect()->route('student.dashboard'),
+        User::ROLE_SUPER_ADMIN => redirect()->route('super-admin.dashboard'),
+        User::ROLE_ADMIN => redirect()->route('admin.dashboard'),
+        User::ROLE_TEACHER => redirect()->route('teacher.dashboard'),
+        User::ROLE_STUDENT => redirect()->route('student.dashboard'),
         default => redirect()->route('onboarding'),
     };
 })->middleware(['auth'])->name('dashboard');
 
-// Onboarding (no school yet)
+// Two-factor challenge (second login step for 2FA accounts)
+Route::get('two-factor-challenge', [TwoFactorChallengeController::class, 'show'])
+    ->name('two-factor.challenge');
+Route::post('two-factor-challenge', [TwoFactorChallengeController::class, 'verify'])
+    ->middleware('throttle:10,1')
+    ->name('two-factor.verify');
+Route::post('two-factor-challenge/cancel', [TwoFactorChallengeController::class, 'logout'])
+    ->name('two-factor.cancel');
+
+// Onboarding (central — no school yet)
 Route::get('onboarding', [OnboardingController::class, 'index'])->name('onboarding');
 Route::post('onboarding/school', [OnboardingController::class, 'createSchool'])->name('onboarding.school');
 Route::post('onboarding/join', [OnboardingController::class, 'join'])->name('onboarding.join');
@@ -104,8 +133,8 @@ Route::middleware(['auth', 'role:student,admin,super_admin'])->prefix('student')
 });
 
 Route::middleware(['auth'])->group(function () {
-    // ── Super Admin ──
-    Route::prefix('super-admin')->name('super-admin.')->group(function () {
+    // ── Super Admin (platform — main domain only) ──
+    Route::middleware(['central'])->prefix('super-admin')->name('super-admin.')->group(function () {
         Route::get('/', [SuperAdminController::class, 'dashboard'])->name('dashboard');
         Route::get('analytics', [SuperAdminController::class, 'analytics'])->name('analytics');
         Route::get('usage-teachers', [SuperAdminController::class, 'usageTeachers'])->name('usage-teachers');
@@ -114,7 +143,7 @@ Route::middleware(['auth'])->group(function () {
         Route::post('schools', [SuperAdminController::class, 'storeSchool'])->name('schools.store');
         Route::put('schools/{school}', [SuperAdminController::class, 'updateSchool'])->name('schools.update');
         Route::delete('schools/{school}', [SuperAdminController::class, 'destroySchool'])->name('schools.destroy');
-        Route::put('schools/{school}/members/{member}', [SuperAdminController::class, 'updateMemberRoleInSchool'])->name('schools.members.role');
+        Route::put('schools/{school}/members/{type}/{id}', [SuperAdminController::class, 'updateMemberRoleInSchool'])->name('schools.members.role');
 
         Route::get('ai-providers', [SuperAdminController::class, 'aiProviders'])->name('ai-providers');
         Route::post('ai-providers', [SuperAdminController::class, 'storeAiProvider'])->name('ai-providers.store');
@@ -147,8 +176,8 @@ Route::middleware(['auth'])->group(function () {
         Route::get('members', [AdminController::class, 'members'])->name('members');
         Route::post('members/invite', [AdminController::class, 'inviteMember'])->name('members.invite');
         Route::post('members/bulk-invite', [AdminController::class, 'bulkInviteMembers'])->name('members.bulk-invite');
-        Route::delete('members/{member}', [AdminController::class, 'removeMember'])->name('members.remove');
-        Route::put('members/{member}', [AdminController::class, 'updateMemberRole'])->name('members.role');
+        Route::put('members/{type}/{id}/role', [AdminController::class, 'updateMemberRole'])->name('members.role');
+        Route::delete('members/{type}/{id}', [AdminController::class, 'removeMember'])->name('members.remove');
 
         Route::get('settings', [AdminController::class, 'settings'])->name('settings');
         Route::put('settings', [AdminController::class, 'updateSettings'])->name('settings.update');
@@ -162,13 +191,24 @@ Route::middleware(['auth'])->group(function () {
         Route::post('terms', [AdminController::class, 'storeTerm'])->name('terms.store');
         Route::put('terms/{term}', [AdminController::class, 'updateTerm'])->name('terms.update');
         Route::delete('terms/{term}', [AdminController::class, 'destroyTerm'])->name('terms.destroy');
-    });
+    })->middleware('role:admin,super_admin');
+
+    // ── Profile (works on every domain) ──
+    Route::get('profile', [ProfileController::class, 'edit'])->name('profile.edit');
+    Route::patch('profile', [ProfileController::class, 'update'])->name('profile.update');
+    Route::delete('profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
+
+    // ── Two-factor authentication ──
+    Route::post('two-factor/enable', [TwoFactorController::class, 'enable'])->name('two-factor.enable');
+    Route::post('two-factor/confirm', [TwoFactorController::class, 'confirm'])->name('two-factor.confirm');
+    Route::post('two-factor/disable', [TwoFactorController::class, 'disable'])->name('two-factor.disable');
+    Route::post('two-factor/recovery-codes', [TwoFactorController::class, 'regenerate'])->name('two-factor.regenerate');
 
     // ── Materials (shared by teacher/student/admin) ──
-    Route::middleware(['auth', 'role:teacher,student,admin,super_admin'])->prefix('materials')->name('materials.')->group(function () {
+    Route::middleware(['role:teacher,student,admin,super_admin'])->prefix('materials')->name('materials.')->group(function () {
         Route::get('{material}', [MaterialController::class, 'show'])->name('show');
     });
-    Route::middleware(['auth', 'role:teacher,admin,super_admin'])->prefix('materials')->name('materials.')->group(function () {
+    Route::middleware(['role:teacher,admin,super_admin'])->prefix('materials')->name('materials.')->group(function () {
         Route::post('{material}/generate', [MaterialController::class, 'generate'])->name('generate');
         Route::get('jobs/{job}', [MaterialController::class, 'jobStatus'])->name('job.status');
     });

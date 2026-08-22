@@ -10,7 +10,7 @@
                 <label class="text-xs text-muted block">Description</label>
                 <textarea name="description" class="w-full border rounded px-2 py-1">{{ $class->description }}</textarea>
             </div>
-            <div class="grid grid-cols-3 gap-3">
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                     <label class="text-xs text-muted block">Subject</label>
                     <select name="subject_id" class="w-full border rounded px-2 py-1">

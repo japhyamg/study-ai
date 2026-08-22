@@ -7,7 +7,7 @@
 
         <form id="createForm" method="POST" action="{{ route('super-admin.ai-providers.store') }}" class="hidden px-5 py-4 border-b bg-paper-sunk space-y-3">
             @csrf
-            <div class="grid grid-cols-2 gap-3">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div><label class="text-xs text-muted">Name</label><input name="name" class="w-full border rounded px-2 py-1" required></div>
                 <div><label class="text-xs text-muted">Model</label><input name="model" class="w-full border rounded px-2 py-1" required></div>
                 <div class="col-span-2"><label class="text-xs text-muted">Base URL</label><input name="base_url" class="w-full border rounded px-2 py-1" placeholder="https://api.example.com/v1" required></div>
@@ -17,7 +17,7 @@
             <button class="px-3 py-1 btn btn-primary text-sm">Save</button>
         </form>
 
-        <table class="w-full text-sm">
+        <div class="table-wrap"><table class="w-full text-sm">
             <thead class="text-left text-muted border-b">
                 <tr><th class="px-5 py-2">Name</th><th class="px-5 py-2">Model</th><th class="px-5 py-2">Base URL</th><th class="px-5 py-2">Status</th><th class="px-5 py-2"></th></tr>
             </thead>
@@ -50,6 +50,6 @@
                     <tr><td colspan="5" class="px-5 py-4 text-faint">No providers configured.</td></tr>
                 @endforelse
             </tbody>
-        </table>
+        </table></div>
     </div>
 </x-layouts.studyai>

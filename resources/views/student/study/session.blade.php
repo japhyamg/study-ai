@@ -22,7 +22,7 @@
 
         <form method="POST" action="{{ route('student.study.answer', $flashcard) }}" id="grade" style="display:none" class="mt-2">
             @csrf
-            <div class="grid grid-cols-4 gap-2">
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 <button name="quality" value="0" class="btn btn-danger">Again</button>
                 <button name="quality" value="3" class="btn btn-ghost">Hard</button>
                 <button name="quality" value="4" class="btn btn-outline">Good</button>

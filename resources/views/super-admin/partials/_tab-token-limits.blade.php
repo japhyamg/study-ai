@@ -16,7 +16,7 @@
     </div>
     <div class="surface">
         <div class="px-5 py-3 border-b font-semibold text-ink">Teacher Limits</div>
-        <table class="w-full text-sm">
+        <div class="table-wrap"><table class="w-full text-sm">
             <thead class="text-left text-muted border-b">
                 <tr>
                     <th class="px-5 py-2">Teacher</th><th class="px-5 py-2">School</th><th class="px-5 py-2">Role</th>
@@ -43,7 +43,7 @@
                     </tr>
                 @endforeach
             </tbody>
-        </table>
+        </table></div>
     </div>
 </div>
 @endif

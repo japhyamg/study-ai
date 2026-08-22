@@ -1,7 +1,7 @@
 <x-layouts.studyai title="Material Review">
     <div class="surface">
         <div class="px-5 py-3 border-b font-semibold text-ink">Materials Awaiting Review</div>
-        <table class="w-full text-sm">
+        <div class="table-wrap"><table class="w-full text-sm">
             <thead class="text-left text-muted border-b">
                 <tr><th class="px-5 py-2">Title</th><th class="px-5 py-2">Class</th><th class="px-5 py-2">Type</th><th class="px-5 py-2">Status</th><th class="px-5 py-2"></th></tr>
             </thead>
@@ -30,7 +30,7 @@
                     <tr><td colspan="5" class="px-5 py-4 text-faint">No materials.</td></tr>
                 @endforelse
             </tbody>
-        </table>
+        </table></div>
         <div class="px-5 py-3 border-t">{{ $materials->links() }}</div>
     </div>
 </x-layouts.studyai>

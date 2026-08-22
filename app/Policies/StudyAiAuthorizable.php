@@ -2,11 +2,10 @@
 
 namespace App\Policies;
 
-use App\Models\SchoolMember;
 use App\Models\User;
 
 /**
- * Shared authorization helpers — mirrors the original app's RLS intent.
+ * Shared authorization helpers.
  * Rules:
  *  - super_admin: access to everything (platform-wide)
  *  - admin:       access within their school
@@ -22,12 +21,12 @@ trait StudyAiAuthorizable
 
     protected function isTeacher(User $user): bool
     {
-        return $user->highestRole() === SchoolMember::ROLE_TEACHER;
+        return $user->highestRole() === User::ROLE_TEACHER;
     }
 
     protected function isStudent(User $user): bool
     {
-        return $user->highestRole() === SchoolMember::ROLE_STUDENT;
+        return $user->highestRole() === User::ROLE_STUDENT;
     }
 
     /** True if user belongs (any role) to the given school. */
@@ -36,6 +35,7 @@ trait StudyAiAuthorizable
         if (! $schoolId) {
             return false;
         }
-        return $user->memberships()->where('school_id', $schoolId)->exists();
+
+        return $user->belongsToSchool($schoolId);
     }
 }
