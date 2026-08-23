@@ -1,8 +1,7 @@
-<x-layouts.studyai title="Analytics: {{ $exam->title }}">
-    <a href="{{ route('teacher.exams.show', $exam) }}" class="text-xs text-accent">← Back</a>
-    <h2 class="font-semibold text-ink mt-2">Analytics: {{ $exam->title }}</h2>
+<x-layouts.studyai title="Analytics" :subtitle="$exam->title"
+                   :back-to="route('teacher.exams.show', $exam)" back-label="Back to exam">
 
-    <div class="grid grid-cols-3 gap-4 mt-4">
+    <div class="grid grid-cols-3 gap-4">
         <div class="surface p-4"><div class="text-xs text-faint">Average score</div><div class="text-2xl font-semibold">{{ number_format($avg, 1) }}%</div></div>
         <div class="surface p-4"><div class="text-xs text-faint">Pass rate</div><div class="text-2xl font-semibold">{{ $total > 0 ? number_format($passRate / $total * 100, 1) : 0 }}%</div></div>
         <div class="surface p-4"><div class="text-xs text-faint">Attempts</div><div class="text-2xl font-semibold">{{ $total }}</div></div>

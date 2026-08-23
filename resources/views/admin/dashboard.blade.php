@@ -1,8 +1,4 @@
-<x-layouts.studyai title="Admin Dashboard">
-    <div class="mb-4">
-        <h1 class="text-xl font-bold text-ink">Admin Dashboard</h1>
-        <p class="text-sm text-muted">{{ $school->name ?? 'School' }}</p>
-    </div>
+<x-layouts.studyai title="Admin Dashboard" :subtitle="$school->name ?? 'School'">
 
     {{-- Stat cards --}}
     <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">

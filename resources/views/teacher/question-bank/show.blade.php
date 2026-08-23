@@ -19,15 +19,14 @@
     ];
 @endphp
 
-<x-layouts.studyai title="Question bank">
+<x-layouts.studyai title="Question bank"
+                   :back-to="route('teacher.question-bank.index')" back-label="All subjects">
     <div x-data="{ adding: false }" @bank-form-cancel="adding = false">
-
-        <a href="{{ route('teacher.question-bank.index') }}" class="text-xs text-accent">← All subjects</a>
 
         {{-- The subject and its action belong to the page, not the app chrome.
              Keeping the button here also means it can drive the panel directly
              instead of dispatching a window event into this scope. --}}
-        <div class="mt-3 mb-4 flex flex-wrap items-end justify-between gap-3">
+        <div class="mb-4 flex flex-wrap items-end justify-between gap-3">
             <h2 class="font-display text-lg text-ink">{{ $subject->name }}</h2>
 
             <x-ui.button type="button" icon="plus" x-on:click="adding = ! adding">

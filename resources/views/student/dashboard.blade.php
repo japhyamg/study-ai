@@ -1,5 +1,4 @@
-<x-layouts.studyai title="Student Dashboard">
-    <h1 class="text-2xl font-bold text-ink mb-5" style="font-family: var(--font-display)">Welcome back, Student</h1>
+<x-layouts.studyai title="Dashboard" subtitle="Welcome back">
 
     {{-- Stat cards --}}
     <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">

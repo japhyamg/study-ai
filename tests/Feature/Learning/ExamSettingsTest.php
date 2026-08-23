@@ -492,6 +492,24 @@ class ExamSettingsTest extends TestCase
             ->assertSee('A draft exam');
     }
 
+    public function test_the_page_title_renders_in_the_body_not_the_topbar(): void
+    {
+        $exam = Exam::create([
+            'school_id' => $this->school->id,
+            'title' => 'Mid-term',
+            'status' => Exam::STATUS_DRAFT,
+            'created_by' => $this->mathsTeacher->id,
+        ]);
+
+        // The layout renders the head inside the content area, so the title
+        // carries the page-title class rather than sitting in the topbar.
+        $this->actingAs($this->mathsTeacher)
+            ->get(route('teacher.exams.show', $exam))
+            ->assertOk()
+            ->assertSee('page-title', false)
+            ->assertSee('page-head', false);
+    }
+
     public function test_the_create_and_edit_pages_link_back(): void
     {
         $exam = Exam::create([

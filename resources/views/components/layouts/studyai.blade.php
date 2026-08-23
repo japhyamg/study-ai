@@ -1,3 +1,13 @@
+@props([
+    'title' => null,
+    'subtitle' => null,
+    // Pages that build their own detailed header opt out of the standard one.
+    'hideHead' => false,
+    // Optional "back to the parent list" link, rendered above the title.
+    'backTo' => null,
+    'backLabel' => 'Back',
+])
+
 @php
     use App\Models\SchoolMember;
 
@@ -145,20 +155,11 @@
                 <x-icon name="menu" />
             </button>
 
-            {{-- Page title: hidden on mobile where space is tight --}}
-            <div class="min-w-0 flex-1">
-                <h1 class="truncate text-sm font-semibold text-ink sm:text-[0.9375rem]">
-                    {{ $title ?? 'Dashboard' }}
-                </h1>
-                @isset($subtitle)
-                    <p class="hidden truncate text-xs text-faint sm:block">{{ $subtitle }}</p>
-                @endisset
-            </div>
-
-            {{-- Contextual actions --}}
-            @isset($actions)
-                <div class="flex items-center gap-2">{{ $actions }}</div>
-            @endisset
+            {{-- The topbar is app chrome: navigation and account only. The page
+                 title, its description and its actions belong to the page and
+                 render at the top of the content area instead. This spacer
+                 pushes the account controls to the end. --}}
+            <div class="flex-1" aria-hidden="true"></div>
 
             <div class="flex items-center gap-1">
                 {{-- AI allowance. Only for people who can spend it: students
@@ -293,8 +294,27 @@
         <main id="main" class="app-main">
             <div class="app-main-inner">
 
+                {{-- Page head. A custom $header slot replaces it outright, for
+                     pages that need something other than a title and actions. --}}
                 @if (isset($header))
                     <div class="page-head">{{ $header }}</div>
+                @elseif (! $hideHead)
+                    <div class="page-head">
+                        <div class="min-w-0">
+                            @if ($backTo)
+                                <a href="{{ $backTo }}" class="text-xs text-accent">← {{ $backLabel }}</a>
+                            @endif
+
+                            <h1 class="page-title {{ $backTo ? 'mt-1' : '' }}">{{ $title ?? 'Dashboard' }}</h1>
+                            @if (filled($subtitle))
+                                <p class="page-sub">{{ $subtitle }}</p>
+                            @endif
+                        </div>
+
+                        @isset($actions)
+                            <div class="flex flex-wrap items-center gap-2">{{ $actions }}</div>
+                        @endisset
+                    </div>
                 @endif
 
                 {{-- Flash messages.

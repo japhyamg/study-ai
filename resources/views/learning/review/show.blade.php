@@ -52,7 +52,7 @@
     $backUrl = $canReview ? route('learning.review') : route('teacher.materials.index');
 @endphp
 
-<x-layouts.studyai :title="$material->title">
+<x-layouts.studyai title="Study guide" hide-head>
 
     <div x-data="{ tab: @js($tab) }">
 

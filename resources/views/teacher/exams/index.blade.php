@@ -6,14 +6,11 @@
     };
 @endphp
 
-<x-layouts.studyai title="Exams">
-    <div class="mb-5 flex flex-wrap items-end justify-between gap-3">
-        <p class="max-w-prose text-sm text-muted">
-            Set a paper, draw questions from the subject bank, then publish it.
-        </p>
-
+<x-layouts.studyai title="Exams"
+                   subtitle="Set a paper, draw questions from the subject bank, then publish it.">
+    <x-slot:actions>
         <x-ui.button :href="route('teacher.exams.create')" icon="plus">New exam</x-ui.button>
-    </div>
+    </x-slot:actions>
 
     @if (session('status'))
         <div class="alert-info mb-4">{{ session('status') }}</div>

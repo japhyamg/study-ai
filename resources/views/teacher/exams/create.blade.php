@@ -1,9 +1,6 @@
-<x-layouts.studyai title="New Exam">
-    <a href="{{ route('teacher.exams.index') }}" class="mb-3 inline-block text-xs text-accent">← All exams</a>
-
-    <p class="mb-4 max-w-prose text-sm text-muted">
-        Set the basics now — you can add questions and change any of this before you publish.
-    </p>
+<x-layouts.studyai title="New exam"
+                   subtitle="Set the basics now — you can add questions and change any of this before you publish."
+                   :back-to="route('teacher.exams.index')" back-label="All exams">
 
     <div class="surface max-w-2xl">
         <form method="POST" action="{{ route('teacher.exams.store') }}" class="px-6 py-5 space-y-5">
