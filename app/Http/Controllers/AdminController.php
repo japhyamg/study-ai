@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\ClassArm;
+use App\Models\ClassSubjectAssignment;
 use App\Models\ExamAttempt;
 use App\Models\School;
 use App\Models\SchoolMember;
@@ -123,16 +124,176 @@ class AdminController extends Controller
     {
         $school = $this->school();
         $search = trim((string) $request->get('search', ''));
-        $query = SchoolMember::with(['user'])
-            ->where('school_id', $school?->id);
-        if ($search) {
-            $query->whereHas('user', function ($q) use ($search) {
-                $q->where('name', 'ilike', "%{$search}%")
-                  ->orWhere('email', 'ilike', "%{$search}%");
-            });
-        }
-        $members = $query->orderBy('created_at', 'desc')->paginate(25)->withQueryString();
+
+        $members = SchoolMember::with(['user'])
+            ->where('school_id', $school?->id)
+            ->when($search, fn ($q) => $q->whereHas('user', fn ($u) => $this->searchUser($u, $search)))
+            ->orderByDesc('school_members.created_at')
+            ->paginate(25)
+            ->withQueryString();
+
         return view('admin.members.index', compact('members', 'search'));
+    }
+
+    public function teachers(Request $request): View
+    {
+        return $this->people($request, SchoolMember::ROLE_TEACHER, 'Teachers');
+    }
+
+    public function students(Request $request): View
+    {
+        return $this->people($request, SchoolMember::ROLE_STUDENT, 'Students');
+    }
+
+    public function administrators(Request $request): View
+    {
+        return $this->people($request, SchoolMember::ROLE_ADMIN, 'Administrators');
+    }
+
+    /**
+     * One role's people within this school.
+     *
+     * Membership carries the role, so the list is driven from school_members
+     * rather than users: a user row alone says nothing about which school the
+     * person belongs to in what capacity.
+     */
+    private function people(Request $request, string $role, string $heading): View
+    {
+        $school = $this->school();
+        $search = trim((string) $request->get('search', ''));
+
+        // Joined rather than filtered through whereHas: the list is ordered by
+        // person name, and a subquery cannot be sorted on. Selecting only
+        // school_members.* keeps the joined columns from overwriting the model.
+        $members = SchoolMember::query()
+            ->with(['user'])
+            ->join('users', 'users.id', '=', 'school_members.user_id')
+            ->where('school_members.school_id', $school?->id)
+            ->where('school_members.role', $role)
+            ->when($search, fn ($q) => $this->searchUser($q, $search))
+            ->orderBy('users.name')
+            ->select('school_members.*')
+            ->paginate(25)
+            ->withQueryString();
+
+        $counts = SchoolMember::where('school_id', $school?->id)
+            ->selectRaw('role, count(*) as total')
+            ->groupBy('role')
+            ->pluck('total', 'role');
+
+        return view('admin.people.index', compact('members', 'search', 'role', 'heading', 'counts'));
+    }
+
+    /**
+     * One person's record.
+     *
+     * Route model binding resolves any user id, so membership of the current
+     * school is checked explicitly - without it an admin could read a user
+     * belonging to another tenant by guessing a uuid.
+     */
+    public function showUser(User $user): View
+    {
+        $school = $this->school();
+
+        $membership = SchoolMember::where('school_id', $school?->id)
+            ->where('user_id', $user->id)
+            ->first();
+
+        abort_unless($membership !== null, 404);
+
+        $user->load(['adminProfile', 'teacherProfile', 'studentProfile']);
+
+        // What the person actually does here, which is the reason to open the
+        // page at all.
+        $classes = collect();
+        $subjects = collect();
+
+        if ($membership->role === SchoolMember::ROLE_TEACHER) {
+            $subjects = ClassSubjectAssignment::with(['subject', 'classArm.classLevel'])
+                ->where('school_id', $school?->id)
+                ->where('teacher_id', $user->id)
+                ->get();
+
+            $classes = ClassArm::with('classLevel')
+                ->where('school_id', $school?->id)
+                ->where('form_teacher_id', $user->id)
+                ->get();
+        }
+
+        if ($membership->role === SchoolMember::ROLE_STUDENT) {
+            $classes = $user->enrollments()
+                ->with('classArm.classLevel')
+                ->get()
+                ->pluck('classArm')
+                ->filter();
+        }
+
+        return view('admin.people.show', compact('user', 'membership', 'classes', 'subjects'));
+    }
+
+    public function updateUser(Request $request, User $user): RedirectResponse
+    {
+        $school = $this->school();
+
+        $membership = SchoolMember::where('school_id', $school?->id)
+            ->where('user_id', $user->id)
+            ->first();
+
+        abort_unless($membership !== null, 404);
+
+        $data = $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
+            'phone' => ['nullable', 'string', 'max:40'],
+            'is_active' => ['nullable', 'boolean'],
+            'role' => ['required', Rule::in([
+                SchoolMember::ROLE_ADMIN, SchoolMember::ROLE_TEACHER, SchoolMember::ROLE_STUDENT,
+            ])],
+        ]);
+
+        // An admin removing their own admin rights would lock themselves out of
+        // the page they are standing on.
+        if ($user->id === $request->user()->id && $data['role'] !== SchoolMember::ROLE_ADMIN) {
+            return back()->withErrors(['role' => 'You cannot change your own role.']);
+        }
+
+        // Nor should the last admin be demoted, leaving the school unmanageable.
+        if ($membership->role === SchoolMember::ROLE_ADMIN && $data['role'] !== SchoolMember::ROLE_ADMIN) {
+            $admins = SchoolMember::where('school_id', $school?->id)
+                ->where('role', SchoolMember::ROLE_ADMIN)
+                ->count();
+
+            if ($admins <= 1) {
+                return back()->withErrors(['role' => 'This is the only administrator. Promote someone else first.']);
+            }
+        }
+
+        $user->update([
+            'name' => $data['name'],
+            'email' => $data['email'],
+            'phone' => $data['phone'] ?? null,
+            'is_active' => $request->boolean('is_active'),
+        ]);
+
+        $membership->update(['role' => $data['role']]);
+
+        return back()->with('status', 'Details updated.');
+    }
+
+    /**
+     * Name or email match.
+     *
+     * `ilike` is Postgres-only and throws on MySQL, which this runs on, so the
+     * comparison is lowered on both sides instead.
+     */
+    private function searchUser($query, string $search): void
+    {
+        $term = '%'.mb_strtolower($search).'%';
+
+        $query->where(function ($q) use ($term) {
+            $q->whereRaw('LOWER(users.name) LIKE ?', [$term])
+              ->orWhereRaw('LOWER(users.email) LIKE ?', [$term]);
+        });
     }
 
     public function inviteMember(Request $request): RedirectResponse
