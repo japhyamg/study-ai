@@ -1,7 +1,15 @@
 @php
     use App\Models\SchoolMember;
 
-    $user       = auth()->user();
+    // Resolve each principal from its own guard explicitly.
+    //
+    // `auth()->user()` cannot be trusted here: the auth middleware calls
+    // shouldUse() on whichever guard authenticated the request, so on
+    // super-admin routes the *default* guard becomes `superadmin` and
+    // auth()->user() returns a SuperAdmin. Calling a school-user method such
+    // as roleInSchool() on it then throws BadMethodCallException, and `?->`
+    // does not help — it guards against null, not against the wrong type.
+    $user       = auth('web')->user();
     $superAdmin = auth('superadmin')->user();
     $principal  = $superAdmin ?? $user;
     $isPlatform = (bool) $superAdmin;
