@@ -14,6 +14,8 @@
 @endphp
 
 <x-layouts.studyai :title="$exam->title" subtitle="Exam setup">
+    <a href="{{ route('teacher.exams.index') }}" class="mb-3 inline-block text-xs text-accent">← All exams</a>
+
     @if (session('status'))
         <div class="alert-info mb-4">{{ session('status') }}</div>
     @endif

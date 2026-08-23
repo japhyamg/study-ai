@@ -1,4 +1,6 @@
 <x-layouts.studyai title="Edit Exam" subtitle="{{ $exam->title }}">
+    <a href="{{ route('teacher.exams.show', $exam) }}" class="mb-3 inline-block text-xs text-accent">← Back to exam</a>
+
     <div class="surface max-w-2xl">
         <form method="POST" action="{{ route('teacher.exams.update', $exam) }}" class="px-6 py-5 space-y-5">
             @csrf @method('PUT')

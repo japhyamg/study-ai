@@ -388,7 +388,29 @@ class ExamSettingsTest extends TestCase
             ->assertSee('45 min')
             ->assertSee('Attempts')
             // The delete control is an icon button; its label is the title.
-            ->assertSee('title="Delete exam"', false);
+            ->assertSee('title="Delete exam"', false)
+            // Every exam page needs a way back to the list.
+            ->assertSee(route('teacher.exams.index'), false);
+    }
+
+    public function test_the_create_and_edit_pages_link_back(): void
+    {
+        $exam = Exam::create([
+            'school_id' => $this->school->id,
+            'title' => 'Mid-term',
+            'status' => Exam::STATUS_DRAFT,
+            'created_by' => $this->mathsTeacher->id,
+        ]);
+
+        $this->actingAs($this->mathsTeacher)
+            ->get(route('teacher.exams.create'))
+            ->assertOk()
+            ->assertSee(route('teacher.exams.index'), false);
+
+        $this->actingAs($this->mathsTeacher)
+            ->get(route('teacher.exams.edit', $exam))
+            ->assertOk()
+            ->assertSee(route('teacher.exams.show', $exam), false);
     }
 }
 
