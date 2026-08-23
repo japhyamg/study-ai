@@ -237,7 +237,22 @@
                 @if ($material->flashcards->isEmpty())
                     <x-ui.empty icon="layers" title="No flashcards" message="None have been generated yet." />
                 @else
-                    <div class="grid gap-3 sm:grid-cols-2">
+                    <div x-data="{ mode: 'list' }">
+                        {{-- A reviewer needs to scan every card to approve it,
+                             so the list stays the default; the deck is for
+                             checking how it will actually read. --}}
+                        <div class="mb-4 flex gap-1">
+                            <button type="button" class="tab-btn" :class="mode === 'list' && 'active'"
+                                    @click="mode = 'list'">All cards</button>
+                            <button type="button" class="tab-btn" :class="mode === 'deck' && 'active'"
+                                    @click="mode = 'deck'">Review deck</button>
+                        </div>
+
+                        <div x-show="mode === 'deck'" x-cloak>
+                            <x-flashcard-deck :cards="$material->flashcards" />
+                        </div>
+
+                        <div x-show="mode === 'list'" class="grid gap-3 sm:grid-cols-2">
                         @foreach ($material->flashcards as $index => $card)
                             <div class="surface p-4">
                                 <div class="mb-2 text-xs text-faint">Card {{ $index + 1 }}</div>
@@ -252,6 +267,7 @@
                                 @endif
                             </div>
                         @endforeach
+                        </div>
                     </div>
                 @endif
             </div>
@@ -261,7 +277,22 @@
                 @if ($material->questions->isEmpty())
                     <x-ui.empty icon="clipboard" title="No quiz" message="No questions have been generated yet." />
                 @else
-                    <ol class="space-y-3">
+                    <div x-data="{ mode: 'list' }">
+                        {{-- Same split as the flashcards: the answer key is what
+                             a reviewer needs, but running the quiz is the only
+                             way to catch a question that does not work. --}}
+                        <div class="mb-4 flex gap-1">
+                            <button type="button" class="tab-btn" :class="mode === 'list' && 'active'"
+                                    @click="mode = 'list'">Answer key</button>
+                            <button type="button" class="tab-btn" :class="mode === 'quiz' && 'active'"
+                                    @click="mode = 'quiz'">Try the quiz</button>
+                        </div>
+
+                        <div x-show="mode === 'quiz'" x-cloak>
+                            <x-quiz :questions="$material->questions" />
+                        </div>
+
+                        <ol x-show="mode === 'list'" class="space-y-3">
                         @foreach ($material->questions as $i => $question)
                             <li class="surface p-4">
                                 <div class="flex gap-3">
@@ -290,7 +321,8 @@
                                 </div>
                             </li>
                         @endforeach
-                    </ol>
+                        </ol>
+                    </div>
                 @endif
             </div>
 

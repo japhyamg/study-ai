@@ -90,36 +90,8 @@
             <x-ui.empty icon="check-circle" title="All caught up"
                         message="You've reviewed every card that's due. Come back when the next one is scheduled." />
         @else
-            <div class="mx-auto max-w-2xl" x-data="flashcardDeck()">
-                <div class="mb-3 flex items-center justify-between text-sm text-muted">
-                    <span>Card <span class="tnum" x-text="index + 1"></span> of <span class="tnum">{{ $due->count() }}</span></span>
-                    <span class="text-xs text-faint">Space to flip · 1–4 to rate</span>
-                </div>
-
-                <div class="flashcard surface" :class="{ 'flipped': flipped }" @click="flip()">
-                    <div class="flashcard-inner">
-                        <div class="flashcard-face flashcard-front" x-text="card.front"></div>
-                        <div class="flashcard-face flashcard-back" x-text="card.back"></div>
-                    </div>
-                </div>
-
-                <div class="mt-4" x-show="flipped" x-cloak>
-                    <div class="mb-2 text-xs text-muted">How well did you know it?</div>
-                    <div class="grid grid-cols-4 gap-2">
-                        @foreach ([['0', 'Again', 'btn-danger'], ['3', 'Hard', 'btn-outline'], ['4', 'Good', 'btn-outline'], ['5', 'Easy', 'btn-primary']] as [$quality, $label, $class])
-                            <form method="POST" :action="answerUrl" class="contents">
-                                @csrf
-                                <input type="hidden" name="quality" value="{{ $quality }}">
-                                <button type="submit" class="btn {{ $class }} btn-sm w-full">{{ $label }}</button>
-                            </form>
-                        @endforeach
-                    </div>
-                </div>
-
-                <button type="button" class="btn btn-ghost mt-3" x-show="!flipped" @click="flip()">
-                    Show answer
-                </button>
-            </div>
+            <x-flashcard-deck :cards="$due"
+                              :answer-route="route('student.study.answer', ['flashcard' => '__ID__'])" />
         @endif
     </div>
 
@@ -129,47 +101,7 @@
             <x-ui.empty icon="clipboard" title="No quiz"
                         message="There are no quiz questions for this material yet." />
         @else
-            <div class="mx-auto max-w-3xl" x-data="quiz()">
-                <ol class="space-y-4">
-                    @foreach ($material->questions as $i => $question)
-                        @php $options = (array) $question->options; @endphp
-                        <li class="surface p-4" x-data="{ id: '{{ $question->id }}', correct: {{ (int) $question->correct_idx }} }">
-                            <div class="text-sm font-medium text-ink">{{ $i + 1 }}. {{ $question->question }}</div>
-
-                            <div class="mt-2.5 space-y-1.5">
-                                @foreach ($options as $index => $option)
-                                    <label class="flex cursor-pointer items-start gap-2 rounded-md px-2 py-1.5 text-sm transition-colors"
-                                           :class="answerClass(id, {{ $index }}, correct)">
-                                        <input type="radio" name="q-{{ $question->id }}" value="{{ $index }}"
-                                               class="mt-0.5" :disabled="submitted"
-                                               @change="answers[id] = {{ $index }}">
-                                        <span>{{ $option }}</span>
-                                    </label>
-                                @endforeach
-                            </div>
-
-                            @if ($question->explanation)
-                                <p class="mt-2 text-xs text-faint" x-show="submitted" x-cloak>
-                                    {{ $question->explanation }}
-                                </p>
-                            @endif
-                        </li>
-                    @endforeach
-                </ol>
-
-                <div class="mt-5 flex items-center gap-3">
-                    <button type="button" class="btn btn-primary" x-show="!submitted" @click="submit()">
-                        Check answers
-                    </button>
-
-                    <div x-show="submitted" x-cloak class="flex items-center gap-3">
-                        <span class="text-sm text-ink">
-                            <span class="tnum font-medium" x-text="score"></span> of {{ $material->questions->count() }} correct
-                        </span>
-                        <button type="button" class="btn btn-ghost btn-sm" @click="reset()">Try again</button>
-                    </div>
-                </div>
-            </div>
+            <x-quiz :questions="$material->questions" />
         @endif
     </div>
 
@@ -199,107 +131,6 @@
                 });
             })();
 
-            // ── Flashcards ──
-            function flashcardDeck() {
-                return {
-                    cards: @json($due->map(fn ($card) => ['id' => $card->id, 'front' => $card->front, 'back' => $card->back])->values()),
-                    index: 0,
-                    flipped: false,
-
-                    get card() {
-                        return this.cards[this.index] ?? { front: '', back: '' };
-                    },
-
-                    get answerUrl() {
-                        // Built from a named route with a placeholder id so the
-                        // prefix stays correct if routing changes.
-                        return '{{ route('student.study.answer', ['flashcard' => '__ID__']) }}'.replace('__ID__', this.card.id);
-                    },
-
-                    flip() {
-                        this.flipped = !this.flipped;
-                    },
-
-                    /**
-                     * Advance to another card.
-                     *
-                     * The card must be un-flipped *before* its text changes,
-                     * otherwise the answer of the next card is visible for the
-                     * length of the flip animation. Everything that changes
-                     * `index` goes through here for exactly that reason.
-                     */
-                    go(next) {
-                        if (next < 0 || next >= this.cards.length) return;
-
-                        if (!this.flipped) {
-                            this.index = next;
-                            return;
-                        }
-
-                        this.flipped = false;
-                        setTimeout(() => { this.index = next; }, 350);
-                    },
-
-                    init() {
-                        document.addEventListener('keydown', (event) => {
-                            const tag = event.target.tagName;
-                            if (tag === 'INPUT' || tag === 'TEXTAREA') return;
-
-                            if (event.code === 'Space') {
-                                event.preventDefault();
-                                this.flip();
-                                return;
-                            }
-
-                            if (!this.flipped) return;
-
-                            const quality = { '1': 0, '2': 3, '3': 4, '4': 5 }[event.key];
-                            if (quality === undefined) return;
-
-                            const forms = this.$el.querySelectorAll('form');
-                            const map = { 0: 0, 3: 1, 4: 2, 5: 3 };
-                            forms[map[quality]]?.requestSubmit();
-                        });
-                    },
-                };
-            }
-
-            // ── Quiz ──
-            function quiz() {
-                return {
-                    answers: {},
-                    submitted: false,
-                    score: 0,
-
-                    submit() {
-                        this.submitted = true;
-                        this.score = 0;
-
-                        this.$el.querySelectorAll('[x-data]').forEach((node) => {
-                            const data = Alpine.$data(node);
-                            if (data.id !== undefined && this.answers[data.id] === data.correct) {
-                                this.score++;
-                            }
-                        });
-                    },
-
-                    reset() {
-                        this.submitted = false;
-                        this.answers = {};
-                        this.score = 0;
-                        this.$el.querySelectorAll('input[type=radio]').forEach((input) => {
-                            input.checked = false;
-                        });
-                    },
-
-                    answerClass(id, index, correct) {
-                        if (!this.submitted) return '';
-                        if (index === correct) return 'bg-success/10 text-success';
-                        if (this.answers[id] === index) return 'bg-danger/10 text-danger';
-                        return '';
-                    },
-                };
-            }
         </script>
     @endpush
 </x-layouts.studyai>

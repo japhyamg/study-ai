@@ -9,6 +9,7 @@ use App\Models\ExamQuestion;
 use App\Models\Flashcard;
 use App\Models\Material;
 use App\Models\School;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -369,12 +370,21 @@ class StudentController extends Controller
     /**
      * Record an answer during a study session and advance.
      */
-    public function studyAnswer(Request $request, Flashcard $flashcard): RedirectResponse
+    public function studyAnswer(Request $request, Flashcard $flashcard): RedirectResponse|JsonResponse
     {
         abort_unless($this->canReviewFlashcard($flashcard), 403);
         $data = $request->validate(['quality' => 'required|integer|min:0|max:5']);
 
         $this->applySm2($flashcard, (int) $data['quality']);
+
+        // The deck posts ratings in the background so the reader never waits
+        // on a round trip; only the non-JS path needs a redirect.
+        if ($request->expectsJson()) {
+            return response()->json([
+                'due_date' => $flashcard->due_date?->toIso8601String(),
+                'interval' => $flashcard->interval,
+            ]);
+        }
 
         $queue = session('study_queue', []);
         $index = (int) session('study_index', 0) + 1;
@@ -383,6 +393,7 @@ class StudentController extends Controller
         if ($index >= count($queue)) {
             return redirect()->route('student.study.index')->with('status', 'Study session complete — nice work.');
         }
+
         return back();
     }
 
