@@ -7,6 +7,7 @@ use App\Models\ClassEnrollment;
 use App\Models\ClassLevel;
 use App\Models\ClassSubjectAssignment;
 use App\Models\Exam;
+use App\Models\Material;
 use App\Models\School;
 use App\Models\SchoolMember;
 use App\Models\Subject;
@@ -197,6 +198,99 @@ class SubjectsTest extends TestCase
             ->assertOk()
             ->assertSee('Your subjects')
             ->assertSee('Mathematics');
+    }
+
+    /** A published guide for a subject. */
+    private function guide(string $title, ?Subject $subject): Material
+    {
+        return Material::create([
+            'school_id' => $this->school->id,
+            'subject_id' => $subject?->id,
+            'created_by' => $this->teacher->id,
+            'title' => $title,
+            'type' => 'note',
+            'content' => 'Lesson content.',
+            'workflow_state' => Material::STATE_PUBLISHED,
+        ]);
+    }
+
+    public function test_a_subject_page_lists_its_study_guides(): void
+    {
+        $this->guide('Algebra basics', $this->maths);
+        $this->guide('Organic chemistry', $this->chemistry);
+
+        $this->actingAs($this->student)
+            ->get(route('student.subjects.show', $this->maths))
+            ->assertOk()
+            ->assertSee('Algebra basics')
+            ->assertDontSee('Organic chemistry');
+    }
+
+    public function test_the_study_guide_list_is_scoped_to_taught_subjects(): void
+    {
+        $this->guide('Algebra basics', $this->maths);
+        $this->guide('Organic chemistry', $this->chemistry);
+
+        $this->actingAs($this->student)
+            ->get(route('student.study.index'))
+            ->assertOk()
+            ->assertSee('Algebra basics')
+            ->assertDontSee('Organic chemistry');
+    }
+
+    public function test_a_guide_with_no_subject_stays_visible(): void
+    {
+        // School-wide material would otherwise disappear from the list.
+        $this->guide('Study skills', null);
+
+        $this->actingAs($this->student)
+            ->get(route('student.study.index'))
+            ->assertOk()
+            ->assertSee('Study skills');
+    }
+
+    public function test_a_guide_without_flashcards_is_still_listed(): void
+    {
+        // The old list hid these, so a teacher's guide vanished until someone
+        // generated cards for it.
+        $this->guide('Algebra basics', $this->maths);
+
+        $this->actingAs($this->student)
+            ->get(route('student.study.index'))
+            ->assertOk()
+            ->assertSee('Algebra basics');
+    }
+
+    public function test_a_guide_for_an_untaught_subject_cannot_be_opened(): void
+    {
+        $guide = $this->guide('Organic chemistry', $this->chemistry);
+
+        $this->actingAs($this->student)
+            ->get(route('student.study.hub', $guide))
+            ->assertNotFound();
+    }
+
+    public function test_a_guide_for_a_taught_subject_opens_with_its_three_tabs(): void
+    {
+        $guide = $this->guide('Algebra basics', $this->maths);
+
+        $this->actingAs($this->student)
+            ->get(route('student.study.hub', $guide))
+            ->assertOk()
+            ->assertSee('Study guide')
+            ->assertSee('Flashcards')
+            ->assertSee('Quiz');
+    }
+
+    public function test_an_unpublished_guide_is_not_listed(): void
+    {
+        $draft = $this->guide('Draft notes', $this->maths);
+        $draft->update(['workflow_state' => Material::STATE_DRAFT]);
+
+        $this->actingAs($this->student)
+            ->get(route('student.study.index'))
+            ->assertOk()
+            ->assertDontSee('Draft notes');
     }
 
     public function test_the_removed_student_pages_are_gone(): void

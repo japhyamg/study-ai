@@ -2,7 +2,40 @@
                    :back-to="route('student.subjects')" back-label="All subjects">
 
     <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <div class="lg:col-span-2">
+        <div class="space-y-6 lg:col-span-2">
+            <x-ui.card title="Study guides" :padded="false">
+                @if ($guides->isEmpty())
+                    <div class="px-5 py-8 text-center text-sm text-faint">
+                        Nothing published for this subject yet.
+                    </div>
+                @else
+                    <ul class="divide-y divide-line">
+                        @foreach ($guides as $guide)
+                            <li>
+                                <a href="{{ route('student.study.hub', $guide) }}"
+                                   class="flex items-center justify-between gap-3 px-5 py-3 transition-colors hover:bg-surface-sunk/50">
+                                    <div class="min-w-0">
+                                        <p class="truncate text-sm text-ink">{{ $guide->title }}</p>
+                                        <p class="mt-0.5 text-xs text-faint">
+                                            Guide
+                                            @if ($guide->flashcards_count)
+                                                · <span class="tnum">{{ $guide->flashcards_count }}</span>
+                                                {{ Str::plural('card', $guide->flashcards_count) }}
+                                            @endif
+                                            @if ($guide->questions_count)
+                                                · <span class="tnum">{{ $guide->questions_count }}</span>
+                                                {{ Str::plural('question', $guide->questions_count) }}
+                                            @endif
+                                        </p>
+                                    </div>
+                                    <x-icon name="chevron-right" class="shrink-0 text-faint" />
+                                </a>
+                            </li>
+                        @endforeach
+                    </ul>
+                @endif
+            </x-ui.card>
+
             <x-ui.card title="Exams" :padded="false">
                 @if ($exams->isEmpty())
                     <div class="px-5 py-8 text-center text-sm text-faint">

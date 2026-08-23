@@ -108,7 +108,7 @@ final class Navigation
                 self::link('Subjects', 'student.subjects', 'book', 'student.subjects*'),
             ],
             'Practice' => [
-                self::link('Study', 'student.study.index', 'sparkles', 'student.study*'),
+                self::link('Study guides', 'student.study.index', 'document', 'student.study*'),
                 self::link('Exams', 'student.exams', 'clipboard', 'student.exams*'),
             ],
         ];

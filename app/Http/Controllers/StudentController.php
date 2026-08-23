@@ -11,6 +11,7 @@ use App\Models\Flashcard;
 use App\Models\Material;
 use App\Models\School;
 use App\Models\Subject;
+use App\Models\User;
 use App\Services\Learning\ExamPaperService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -169,7 +170,15 @@ class StudentController extends Controller
             ->get()
             ->keyBy('exam_id');
 
-        return view('student.subject-show', compact('subject', 'assignment', 'exams', 'attempts'));
+        // Only this subject's guides. The shared query keeps the visibility
+        // rule in one place rather than restating it per screen.
+        $guides = $this->studyGuideQuery($user)
+            ->where('subject_id', $subject->id)
+            ->withCount(['flashcards', 'questions'])
+            ->orderBy('title')
+            ->get();
+
+        return view('student.subject-show', compact('subject', 'assignment', 'exams', 'attempts', 'guides'));
     }
 
     // ── Exams ──
@@ -290,19 +299,48 @@ class StudentController extends Controller
     public function studyIndex(): View
     {
         $user = auth()->user();
-        $materials = Material::where('school_id', $user->currentSchool()?->id)
-            ->published()
-            ->withCount(['flashcards'])
+
+        // Every published guide for the subjects this student is taught, not
+        // only the ones that happen to carry flashcards: a guide is worth
+        // reading on its own, and hiding it because nobody generated cards for
+        // it yet makes teachers' work disappear.
+        $materials = $this->studyGuideQuery($user)
+            ->withCount(['flashcards', 'questions'])
             ->orderBy('title')
             ->get()
-            ->filter(fn ($m) => $m->flashcards_count > 0)
-            ->values();
+            ->groupBy(fn ($m) => $m->subject?->name ?? 'General');
 
         $dueCount = self::visibleFlashcardsQuery($user)
             ->where(fn ($q) => $q->whereNull('due_date')->orWhere('due_date', '<=', now()))
             ->count();
 
         return view('student.study.index', compact('materials', 'dueCount'));
+    }
+
+    /**
+     * Published guides a student may open.
+     *
+     * Scoped to the subjects taught to their own class arms. A guide with no
+     * subject is school-wide and stays visible, otherwise general material
+     * would vanish from the list entirely.
+     */
+    private function studyGuideQuery(User $user)
+    {
+        $armIds = ClassEnrollment::where('user_id', $user->id)
+            ->pluck('class_arm_id')
+            ->filter();
+
+        $subjectIds = ClassSubjectAssignment::whereIn('class_arm_id', $armIds)
+            ->pluck('subject_id')
+            ->filter()
+            ->unique();
+
+        return Material::with('subject')
+            ->where('school_id', $user->currentSchool()?->id)
+            ->published()
+            ->where(function ($q) use ($subjectIds) {
+                $q->whereIn('subject_id', $subjectIds)->orWhereNull('subject_id');
+            });
     }
 
     /**
@@ -315,6 +353,13 @@ class StudentController extends Controller
         abort_unless($material->isPublished(), 403);
         $user = auth()->user();
         abort_unless($material->school_id === $user->currentSchool()?->id, 403);
+
+        // Same scope as the list. Being in the school is not enough: a guide
+        // for a subject this student is not taught should not open by id.
+        abort_unless(
+            $this->studyGuideQuery($user)->whereKey($material->id)->exists(),
+            404
+        );
 
         $material->load([
             'flashcards' => fn ($q) => $q->orderBy('id'),

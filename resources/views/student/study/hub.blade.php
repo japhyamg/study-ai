@@ -20,7 +20,7 @@
 <x-layouts.studyai :title="$material->title"
                    :subtitle="collect([$material->subject?->name, $material->classArm?->fullName()])->filter()->join(' · ')">
 
-    <a href="{{ route('student.study.index') }}" class="text-xs text-accent">← All study sets</a>
+    <a href="{{ route('student.study.index') }}" class="text-xs text-accent">← All study guides</a>
 
     <div class="mb-5 mt-3 flex flex-wrap gap-1 border-b border-line">
         @foreach ($tabs as [$key, $label, $count])
