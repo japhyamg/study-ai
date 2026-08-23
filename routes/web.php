@@ -3,134 +3,86 @@
 use App\Http\Controllers\AdminController;
 use App\Http\Controllers\MaterialController;
 use App\Http\Controllers\OnboardingController;
+use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\StudentController;
-use App\Http\Controllers\SuperAdminController;
+use App\Http\Controllers\SuperAdmin\ImpersonationController;
 use App\Http\Controllers\TeacherController;
 use App\Http\Controllers\TopicController;
-use Illuminate\Support\Facades\Route;
-use Illuminate\Support\Facades\Auth;
+use App\Http\Controllers\TwoFactorController;
 use App\Models\SchoolMember;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Route;
+
+/*
+|--------------------------------------------------------------------------
+| Tenant routes — {school}.{APP_DOMAIN}
+|--------------------------------------------------------------------------
+|
+| Every route here runs inside a resolved school. Administrators, teachers and
+| students all authenticate through the same login route; what they can reach
+| afterwards is decided by their role within this school.
+|
+*/
 
 require __DIR__.'/auth.php';
 
-// Root → role-based dashboard
-Route::redirect('/', '/dashboard');
+Route::redirect('/', '/dashboard')->name('home');
 
-// Role-based home dispatch
+// Role-based dispatch
 Route::get('/dashboard', function () {
     $user = Auth::user();
+
     if (! $user) {
         return redirect()->route('login');
     }
-    return match ($user->highestRole()) {
-        SchoolMember::ROLE_SUPER_ADMIN => redirect()->route('super-admin.dashboard'),
+
+    return match ($user->roleInSchool()) {
         SchoolMember::ROLE_ADMIN => redirect()->route('admin.dashboard'),
         SchoolMember::ROLE_TEACHER => redirect()->route('teacher.dashboard'),
         SchoolMember::ROLE_STUDENT => redirect()->route('student.dashboard'),
         default => redirect()->route('onboarding'),
     };
-})->middleware(['auth'])->name('dashboard');
+})->middleware(['auth', 'school.user', '2fa'])->name('dashboard');
 
-// Onboarding (no school yet)
-Route::get('onboarding', [OnboardingController::class, 'index'])->name('onboarding');
-Route::post('onboarding/school', [OnboardingController::class, 'createSchool'])->name('onboarding.school');
-Route::post('onboarding/join', [OnboardingController::class, 'join'])->name('onboarding.join');
-
-// ── Teacher ──
-Route::middleware(['auth', 'role:teacher,admin,super_admin'])->prefix('teacher')->name('teacher.')->group(function () {
-    Route::get('dashboard', [TeacherController::class, 'dashboard'])->name('dashboard');
-    Route::get('classes', [TeacherController::class, 'teacherClasses'])->name('classes.index');
-    Route::get('classes/{class}', [TeacherController::class, 'teacherClassShow'])->name('classes.show');
-    Route::get('exams', [TeacherController::class, 'exams'])->name('exams.index');
-    Route::get('exams/new', [TeacherController::class, 'createExam'])->name('exams.create');
-    Route::post('exams', [TeacherController::class, 'storeExam'])->name('exams.store');
-    Route::get('exams/{exam}', [TeacherController::class, 'showExam'])->name('exams.show');
-    Route::get('exams/{exam}/edit', [TeacherController::class, 'editExam'])->name('exams.edit');
-    Route::put('exams/{exam}', [TeacherController::class, 'updateExam'])->name('exams.update');
-    Route::put('exams/{exam}/publish', [TeacherController::class, 'publishExam'])->name('exams.publish');
-    Route::put('exams/{exam}/unpublish', [TeacherController::class, 'unpublishExam'])->name('exams.unpublish');
-    Route::delete('exams/{exam}', [TeacherController::class, 'destroyExam'])->name('exams.destroy');
-    Route::post('exams/{exam}/questions', [TeacherController::class, 'addQuestion'])->name('exams.questions.store');
-    Route::delete('exams/{exam}/questions/{question}', [TeacherController::class, 'removeQuestion'])->name('exams.questions.destroy');
-    Route::get('materials', [TeacherController::class, 'materialsIndex'])->name('materials.index');
-    Route::get('materials/create', [TeacherController::class, 'materialsCreate'])->name('materials.create');
-    Route::post('materials', [TeacherController::class, 'materialsStore'])->name('materials.store');
-    Route::get('materials/review', [TeacherController::class, 'reviewMaterials'])->name('materials.review');
-    Route::get('materials/{material}', [TeacherController::class, 'materialsShow'])->name('materials.show');
-    Route::get('materials/{material}/edit', [TeacherController::class, 'materialsEdit'])->name('materials.edit');
-    Route::put('materials/{material}', [TeacherController::class, 'materialsUpdate'])->name('materials.update');
-    Route::delete('materials/{material}', [TeacherController::class, 'destroyMaterial'])->name('materials.destroy');
-    Route::post('materials/{material}/approve-all', [TeacherController::class, 'materialsApproveAll'])->name('materials.approve-all');
-    Route::put('materials/{material}/approve', [TeacherController::class, 'approveMaterial'])->name('materials.approve');
-    Route::put('materials/{material}/reject', [TeacherController::class, 'rejectMaterial'])->name('materials.reject');
-
-    // Per-flashcard edit/delete (used by the tabbed material detail)
-    Route::put('flashcards/{flashcard}', [TeacherController::class, 'updateFlashcard'])->name('flashcards.update');
-    Route::delete('flashcards/{flashcard}', [TeacherController::class, 'destroyFlashcard'])->name('flashcards.destroy');
-    // Per-question edit/delete (used by the tabbed material detail)
-    Route::put('questions/{question}', [TeacherController::class, 'updateQuestion'])->name('questions.update');
-    Route::delete('questions/{question}', [TeacherController::class, 'destroyQuestion'])->name('questions.destroy');
-
-    Route::get('exams/{exam}/analytics', [TeacherController::class, 'examAnalytics'])->name('exams.analytics');
-
-    Route::get('question-bank', [TeacherController::class, 'questionBankIndex'])->name('question-bank.index');
-    Route::post('question-bank', [TeacherController::class, 'questionBankStore'])->name('question-bank.store');
-    Route::delete('question-bank/{qb}', [TeacherController::class, 'questionBankDestroy'])->name('question-bank.destroy');
+// Onboarding (authenticated but not yet attached to this school)
+Route::middleware(['auth', '2fa'])->group(function () {
+    Route::get('onboarding', [OnboardingController::class, 'index'])->name('onboarding');
+    Route::post('onboarding/school', [OnboardingController::class, 'createSchool'])->name('onboarding.school');
+    Route::post('onboarding/join', [OnboardingController::class, 'join'])->name('onboarding.join');
 });
 
-// ── Student ──
-Route::middleware(['auth', 'role:student,admin,super_admin'])->prefix('student')->name('student.')->group(function () {
-    Route::get('dashboard', [StudentController::class, 'dashboard'])->name('dashboard');
-    Route::get('classes', [StudentController::class, 'classes'])->name('classes');
-    Route::get('classes/{enrollment}', [StudentController::class, 'classShow'])->name('classes.show');
-    Route::get('materials', [StudentController::class, 'materials'])->name('materials');
-    Route::get('exams', [StudentController::class, 'exams'])->name('exams');
-    Route::post('exams/{exam}/start', [StudentController::class, 'startExam'])->name('exams.start');
-    Route::get('exams/{exam}/take/{attempt}', [StudentController::class, 'takeExam'])->name('exams.take');
-    Route::post('exams/{exam}/attempt/{attempt}', [StudentController::class, 'submitExam'])->name('exams.submit');
-    Route::get('exams/{exam}/result/{attempt}', [StudentController::class, 'examResult'])->name('exams.result');
-    Route::get('flashcards', [StudentController::class, 'flashcards'])->name('flashcards');
-    Route::post('flashcards/{flashcard}/review', [StudentController::class, 'reviewFlashcard'])->name('flashcards.review');
-    Route::get('topics', [TopicController::class, 'index'])->name('topics.index');
-    Route::post('topics/generate', [TopicController::class, 'generate'])->name('topics.generate');
-    Route::delete('topics/{topic}', [TopicController::class, 'destroy'])->name('topics.destroy');
+/*
+|--------------------------------------------------------------------------
+| Profile & account security — every signed-in school user
+|--------------------------------------------------------------------------
+*/
+Route::middleware(['auth', 'school.user', '2fa'])->group(function () {
+    Route::get('profile', [ProfileController::class, 'edit'])->name('profile.edit');
+    Route::patch('profile', [ProfileController::class, 'update'])->name('profile.update');
+    Route::put('profile/details', [ProfileController::class, 'updateRoleDetails'])->name('profile.details');
+    Route::put('profile/preferences', [ProfileController::class, 'updatePreferences'])->name('profile.preferences');
+    Route::delete('profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 
-    // Study mode (guided flashcard review session)
-    Route::get('study', [StudentController::class, 'studyIndex'])->name('study.index');
-    Route::get('study/session', [StudentController::class, 'studySession'])->name('study.session');
-    Route::get('study/session/{material}', [StudentController::class, 'studySession'])->name('study.session.material');
-    Route::get('study/{material}', [StudentController::class, 'studyHub'])->name('study.hub');
-    Route::post('study/{flashcard}/answer', [StudentController::class, 'studyAnswer'])->name('study.answer');
+    // Two-factor authentication
+    Route::post('profile/two-factor', [TwoFactorController::class, 'enable'])->name('two-factor.enable');
+    Route::post('profile/two-factor/confirm', [TwoFactorController::class, 'confirm'])->name('two-factor.confirm');
+    Route::post('profile/two-factor/recovery-codes', [TwoFactorController::class, 'regenerate'])->name('two-factor.recovery-codes');
+    Route::delete('profile/two-factor', [TwoFactorController::class, 'disable'])->name('two-factor.disable');
+
+    // Leave an impersonation session started by platform staff
+    Route::post('stop-impersonating', [ImpersonationController::class, 'stop'])->name('impersonate.stop');
 });
 
-Route::middleware(['auth'])->group(function () {
-    // ── Super Admin ──
-    Route::prefix('super-admin')->name('super-admin.')->group(function () {
-        Route::get('/', [SuperAdminController::class, 'dashboard'])->name('dashboard');
-        Route::get('analytics', [SuperAdminController::class, 'analytics'])->name('analytics');
-        Route::get('usage-teachers', [SuperAdminController::class, 'usageTeachers'])->name('usage-teachers');
-        Route::get('schools', [SuperAdminController::class, 'schools'])->name('schools');
-        Route::get('schools/{school}', [SuperAdminController::class, 'schoolDetail'])->name('schools.show');
-        Route::post('schools', [SuperAdminController::class, 'storeSchool'])->name('schools.store');
-        Route::put('schools/{school}', [SuperAdminController::class, 'updateSchool'])->name('schools.update');
-        Route::delete('schools/{school}', [SuperAdminController::class, 'destroySchool'])->name('schools.destroy');
-        Route::put('schools/{school}/members/{member}', [SuperAdminController::class, 'updateMemberRoleInSchool'])->name('schools.members.role');
-
-        Route::get('ai-providers', [SuperAdminController::class, 'aiProviders'])->name('ai-providers');
-        Route::post('ai-providers', [SuperAdminController::class, 'storeAiProvider'])->name('ai-providers.store');
-        Route::put('ai-providers/{ai_provider}', [SuperAdminController::class, 'updateAiProvider'])->name('ai-providers.update');
-        Route::delete('ai-providers/{ai_provider}', [SuperAdminController::class, 'destroyAiProvider'])->name('ai-providers.destroy');
-
-        Route::get('token-limits', [SuperAdminController::class, 'tokenLimits'])->name('token-limits');
-        Route::put('token-limits/default', [SuperAdminController::class, 'setDefaultTokenLimit'])->name('token-limits.default');
-        Route::put('token-limits/{userId}', [SuperAdminController::class, 'setTeacherTokenLimit'])->name('token-limits.user');
-        Route::get('token-usage', [SuperAdminController::class, 'tokenUsage'])->name('token-usage');
-    });
-
-    // ── Admin (school-scoped) ──
-    Route::prefix('admin')->name('admin.')->group(function () {
+/*
+|--------------------------------------------------------------------------
+| Administrator
+|--------------------------------------------------------------------------
+*/
+Route::middleware(['auth', 'school.user', '2fa', 'role:admin'])
+    ->prefix('admin')->name('admin.')->group(function () {
         Route::get('dashboard', [AdminController::class, 'dashboard'])->name('dashboard');
         Route::get('analytics', [AdminController::class, 'analytics'])->name('analytics');
+
         Route::get('classes', [AdminController::class, 'classes'])->name('classes.index');
         Route::get('classes/new', [AdminController::class, 'createClass'])->name('classes.create');
         Route::post('classes', [AdminController::class, 'storeClass'])->name('classes.store');
@@ -144,7 +96,13 @@ Route::middleware(['auth'])->group(function () {
         Route::get('classes/{class}/invite-codes', [AdminController::class, 'inviteCodes'])->name('classes.invite-codes');
         Route::post('classes/{class}/invite-codes', [AdminController::class, 'storeInviteCode'])->name('classes.invite-codes.store');
 
+        // People — one screen per user type, backed by separate profile tables
         Route::get('members', [AdminController::class, 'members'])->name('members');
+        Route::get('teachers', [AdminController::class, 'teachers'])->name('teachers');
+        Route::get('students', [AdminController::class, 'students'])->name('students');
+        Route::get('administrators', [AdminController::class, 'administrators'])->name('administrators');
+        Route::get('people/{user}', [AdminController::class, 'showUser'])->name('people.show');
+        Route::put('people/{user}', [AdminController::class, 'updateUser'])->name('people.update');
         Route::post('members/invite', [AdminController::class, 'inviteMember'])->name('members.invite');
         Route::post('members/bulk-invite', [AdminController::class, 'bulkInviteMembers'])->name('members.bulk-invite');
         Route::delete('members/{member}', [AdminController::class, 'removeMember'])->name('members.remove');
@@ -164,12 +122,95 @@ Route::middleware(['auth'])->group(function () {
         Route::delete('terms/{term}', [AdminController::class, 'destroyTerm'])->name('terms.destroy');
     });
 
-    // ── Materials (shared by teacher/student/admin) ──
-    Route::middleware(['auth', 'role:teacher,student,admin,super_admin'])->prefix('materials')->name('materials.')->group(function () {
-        Route::get('{material}', [MaterialController::class, 'show'])->name('show');
+/*
+|--------------------------------------------------------------------------
+| Teacher
+|--------------------------------------------------------------------------
+*/
+Route::middleware(['auth', 'school.user', '2fa', 'role:teacher,admin'])
+    ->prefix('teacher')->name('teacher.')->group(function () {
+        Route::get('dashboard', [TeacherController::class, 'dashboard'])->name('dashboard');
+        Route::get('classes', [TeacherController::class, 'teacherClasses'])->name('classes.index');
+        Route::get('classes/{class}', [TeacherController::class, 'teacherClassShow'])->name('classes.show');
+
+        Route::get('exams', [TeacherController::class, 'exams'])->name('exams.index');
+        Route::get('exams/new', [TeacherController::class, 'createExam'])->name('exams.create');
+        Route::post('exams', [TeacherController::class, 'storeExam'])->name('exams.store');
+        Route::get('exams/{exam}', [TeacherController::class, 'showExam'])->name('exams.show');
+        Route::get('exams/{exam}/edit', [TeacherController::class, 'editExam'])->name('exams.edit');
+        Route::put('exams/{exam}', [TeacherController::class, 'updateExam'])->name('exams.update');
+        Route::put('exams/{exam}/publish', [TeacherController::class, 'publishExam'])->name('exams.publish');
+        Route::put('exams/{exam}/unpublish', [TeacherController::class, 'unpublishExam'])->name('exams.unpublish');
+        Route::delete('exams/{exam}', [TeacherController::class, 'destroyExam'])->name('exams.destroy');
+        Route::post('exams/{exam}/questions', [TeacherController::class, 'addQuestion'])->name('exams.questions.store');
+        Route::delete('exams/{exam}/questions/{question}', [TeacherController::class, 'removeQuestion'])->name('exams.questions.destroy');
+        Route::get('exams/{exam}/analytics', [TeacherController::class, 'examAnalytics'])->name('exams.analytics');
+
+        Route::get('materials', [TeacherController::class, 'materialsIndex'])->name('materials.index');
+        Route::get('materials/create', [TeacherController::class, 'materialsCreate'])->name('materials.create');
+        Route::post('materials', [TeacherController::class, 'materialsStore'])->name('materials.store');
+        Route::get('materials/review', [TeacherController::class, 'reviewMaterials'])->name('materials.review');
+        Route::get('materials/{material}', [TeacherController::class, 'materialsShow'])->name('materials.show');
+        Route::get('materials/{material}/edit', [TeacherController::class, 'materialsEdit'])->name('materials.edit');
+        Route::put('materials/{material}', [TeacherController::class, 'materialsUpdate'])->name('materials.update');
+        Route::delete('materials/{material}', [TeacherController::class, 'destroyMaterial'])->name('materials.destroy');
+        Route::post('materials/{material}/approve-all', [TeacherController::class, 'materialsApproveAll'])->name('materials.approve-all');
+        Route::put('materials/{material}/approve', [TeacherController::class, 'approveMaterial'])->name('materials.approve');
+        Route::put('materials/{material}/reject', [TeacherController::class, 'rejectMaterial'])->name('materials.reject');
+
+        Route::put('flashcards/{flashcard}', [TeacherController::class, 'updateFlashcard'])->name('flashcards.update');
+        Route::delete('flashcards/{flashcard}', [TeacherController::class, 'destroyFlashcard'])->name('flashcards.destroy');
+        Route::put('questions/{question}', [TeacherController::class, 'updateQuestion'])->name('questions.update');
+        Route::delete('questions/{question}', [TeacherController::class, 'destroyQuestion'])->name('questions.destroy');
+
+        Route::get('question-bank', [TeacherController::class, 'questionBankIndex'])->name('question-bank.index');
+        Route::post('question-bank', [TeacherController::class, 'questionBankStore'])->name('question-bank.store');
+        Route::delete('question-bank/{qb}', [TeacherController::class, 'questionBankDestroy'])->name('question-bank.destroy');
     });
-    Route::middleware(['auth', 'role:teacher,admin,super_admin'])->prefix('materials')->name('materials.')->group(function () {
-        Route::post('{material}/generate', [MaterialController::class, 'generate'])->name('generate');
-        Route::get('jobs/{job}', [MaterialController::class, 'jobStatus'])->name('job.status');
+
+/*
+|--------------------------------------------------------------------------
+| Student
+|--------------------------------------------------------------------------
+*/
+Route::middleware(['auth', 'school.user', '2fa', 'role:student,admin'])
+    ->prefix('student')->name('student.')->group(function () {
+        Route::get('dashboard', [StudentController::class, 'dashboard'])->name('dashboard');
+        Route::get('classes', [StudentController::class, 'classes'])->name('classes');
+        Route::get('classes/{enrollment}', [StudentController::class, 'classShow'])->name('classes.show');
+        Route::get('materials', [StudentController::class, 'materials'])->name('materials');
+
+        Route::get('exams', [StudentController::class, 'exams'])->name('exams');
+        Route::post('exams/{exam}/start', [StudentController::class, 'startExam'])->name('exams.start');
+        Route::get('exams/{exam}/take/{attempt}', [StudentController::class, 'takeExam'])->name('exams.take');
+        Route::post('exams/{exam}/attempt/{attempt}', [StudentController::class, 'submitExam'])->name('exams.submit');
+        Route::get('exams/{exam}/result/{attempt}', [StudentController::class, 'examResult'])->name('exams.result');
+
+        Route::get('flashcards', [StudentController::class, 'flashcards'])->name('flashcards');
+        Route::post('flashcards/{flashcard}/review', [StudentController::class, 'reviewFlashcard'])->name('flashcards.review');
+
+        Route::get('topics', [TopicController::class, 'index'])->name('topics.index');
+        Route::post('topics/generate', [TopicController::class, 'generate'])->name('topics.generate');
+        Route::delete('topics/{topic}', [TopicController::class, 'destroy'])->name('topics.destroy');
+
+        Route::get('study', [StudentController::class, 'studyIndex'])->name('study.index');
+        Route::get('study/session', [StudentController::class, 'studySession'])->name('study.session');
+        Route::get('study/session/{material}', [StudentController::class, 'studySession'])->name('study.session.material');
+        Route::get('study/{material}', [StudentController::class, 'studyHub'])->name('study.hub');
+        Route::post('study/{flashcard}/answer', [StudentController::class, 'studyAnswer'])->name('study.answer');
     });
+
+/*
+|--------------------------------------------------------------------------
+| Materials — shared across roles
+|--------------------------------------------------------------------------
+*/
+Route::middleware(['auth', 'school.user', '2fa'])->prefix('materials')->name('materials.')->group(function () {
+    Route::get('{material}', [MaterialController::class, 'show'])
+        ->middleware('role:teacher,student,admin')->name('show');
+
+    Route::post('{material}/generate', [MaterialController::class, 'generate'])
+        ->middleware('role:teacher,admin')->name('generate');
+    Route::get('jobs/{job}', [MaterialController::class, 'jobStatus'])
+        ->middleware('role:teacher,admin')->name('job.status');
 });

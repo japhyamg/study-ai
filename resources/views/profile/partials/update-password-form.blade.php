@@ -1,48 +1,32 @@
-<section>
-    <header>
-        <h2 class="text-lg font-medium text-ink">
-            {{ __('Update Password') }}
-        </h2>
-
-        <p class="mt-1 text-sm text-muted">
-            {{ __('Ensure your account is using a long, random password to stay secure.') }}
-        </p>
-    </header>
-
-    <form method="post" action="{{ route('password.update') }}" class="mt-6 space-y-6">
+<x-ui.card title="Password" subtitle="Use a long, unique password you don't reuse elsewhere.">
+    <form method="POST" action="{{ route('password.update') }}" class="space-y-4">
         @csrf
         @method('put')
 
-        <div>
-            <x-input-label for="update_password_current_password" :value="__('Current Password')" />
-            <x-text-input id="update_password_current_password" name="current_password" type="password" class="mt-1 block w-full" autocomplete="current-password" />
-            <x-input-error :messages="$errors->updatePassword->get('current_password')" class="mt-2" />
-        </div>
+        <x-ui.field label="Current password" name="current_password"
+                    :error="$errors->updatePassword->first('current_password')">
+            <input id="current_password" name="current_password" type="password"
+                   class="input" autocomplete="current-password" required>
+        </x-ui.field>
 
-        <div>
-            <x-input-label for="update_password_password" :value="__('New Password')" />
-            <x-text-input id="update_password_password" name="password" type="password" class="mt-1 block w-full" autocomplete="new-password" />
-            <x-input-error :messages="$errors->updatePassword->get('password')" class="mt-2" />
-        </div>
+        <x-ui.field label="New password" name="password"
+                    hint="At least 8 characters."
+                    :error="$errors->updatePassword->first('password')">
+            <input id="password" name="password" type="password"
+                   class="input" autocomplete="new-password" required>
+        </x-ui.field>
 
-        <div>
-            <x-input-label for="update_password_password_confirmation" :value="__('Confirm Password')" />
-            <x-text-input id="update_password_password_confirmation" name="password_confirmation" type="password" class="mt-1 block w-full" autocomplete="new-password" />
-            <x-input-error :messages="$errors->updatePassword->get('password_confirmation')" class="mt-2" />
-        </div>
+        <x-ui.field label="Confirm new password" name="password_confirmation"
+                    :error="$errors->updatePassword->first('password_confirmation')">
+            <input id="password_confirmation" name="password_confirmation" type="password"
+                   class="input" autocomplete="new-password" required>
+        </x-ui.field>
 
-        <div class="flex items-center gap-4">
-            <x-primary-button>{{ __('Save') }}</x-primary-button>
-
+        <div class="flex items-center justify-end gap-3">
             @if (session('status') === 'password-updated')
-                <p
-                    x-data="{ show: true }"
-                    x-show="show"
-                    x-transition
-                    x-init="setTimeout(() => show = false, 2000)"
-                    class="text-sm text-muted"
-                >{{ __('Saved.') }}</p>
+                <p class="text-xs text-success">Saved.</p>
             @endif
+            <button type="submit" class="btn btn-primary">Update password</button>
         </div>
     </form>
-</section>
+</x-ui.card>

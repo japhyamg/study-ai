@@ -38,9 +38,18 @@ return [
     */
 
     'guards' => [
+        // School users — administrators, teachers and students. They sign in
+        // on their own school's subdomain via a single shared login route.
         'web' => [
             'driver' => 'session',
             'provider' => 'users',
+        ],
+
+        // Platform staff (the SaaS operator). Separate table, separate session
+        // cookie, reachable only on the central/admin domain.
+        'superadmin' => [
+            'driver' => 'session',
+            'provider' => 'super_admins',
         ],
     ],
 
@@ -67,10 +76,10 @@ return [
             'model' => env('AUTH_MODEL', User::class),
         ],
 
-        // 'users' => [
-        //     'driver' => 'database',
-        //     'table' => 'users',
-        // ],
+        'super_admins' => [
+            'driver' => 'eloquent',
+            'model' => \App\Models\SuperAdmin::class,
+        ],
     ],
 
     /*
@@ -96,6 +105,13 @@ return [
         'users' => [
             'provider' => 'users',
             'table' => env('AUTH_PASSWORD_RESET_TOKEN_TABLE', 'password_reset_tokens'),
+            'expire' => 60,
+            'throttle' => 60,
+        ],
+
+        'super_admins' => [
+            'provider' => 'super_admins',
+            'table' => 'super_admin_password_reset_tokens',
             'expire' => 60,
             'throttle' => 60,
         ],
