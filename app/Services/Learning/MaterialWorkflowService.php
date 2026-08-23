@@ -20,6 +20,8 @@ use Illuminate\Validation\ValidationException;
  */
 class MaterialWorkflowService
 {
+    public function __construct(private QuestionBankService $bank) {}
+
     /** Teacher sends a material to an admin for review. */
     public function submit(Material $material, User $teacher, ?string $note = null): Material
     {
@@ -64,13 +66,21 @@ class MaterialWorkflowService
             $material->refresh();
         }
 
-        return $this->apply(
+        $approved = $this->apply(
             $material,
             Material::STATE_APPROVED,
             $admin,
             SubmissionNote::TYPE_APPROVAL,
             $note
         );
+
+        // Approval is the gate: reviewed questions join the subject's bank so
+        // the teacher can reuse them when building an exam. Unreviewed AI
+        // output is precisely what should not accumulate into a pool people
+        // later trust.
+        $this->bank->bankFor($approved);
+
+        return $approved;
     }
 
     /**

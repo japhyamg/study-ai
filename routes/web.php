@@ -172,6 +172,7 @@ Route::middleware(['auth', 'school.user', '2fa', 'role:teacher,admin'])
         Route::put('exams/{exam}/unpublish', [TeacherController::class, 'unpublishExam'])->name('exams.unpublish');
         Route::delete('exams/{exam}', [TeacherController::class, 'destroyExam'])->name('exams.destroy');
         Route::post('exams/{exam}/questions', [TeacherController::class, 'addQuestion'])->name('exams.questions.store');
+        Route::post('exams/{exam}/questions/from-bank', [TeacherController::class, 'importBankQuestions'])->name('exams.questions.from-bank');
         Route::delete('exams/{exam}/questions/{question}', [TeacherController::class, 'removeQuestion'])->name('exams.questions.destroy');
         Route::get('exams/{exam}/analytics', [TeacherController::class, 'examAnalytics'])->name('exams.analytics');
 

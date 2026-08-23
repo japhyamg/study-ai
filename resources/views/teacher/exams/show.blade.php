@@ -33,8 +33,55 @@
             </ol>
         </div>
 
+        <div class="space-y-5 h-fit">
+            {{-- ── From the subject's bank ──
+                 Everything approved for this subject over time, grouped by the
+                 study guide it came from. Questions already on the exam are
+                 filtered out server-side. --}}
+            <div class="surface p-5">
+                <div class="mb-1 font-semibold text-ink">Add from question bank</div>
+
+                @if ($questionBank->isEmpty())
+                    <p class="text-xs text-faint">
+                        Nothing available yet. Questions join the bank for a subject once an
+                        admin approves the study guide they came from.
+                    </p>
+                @else
+                    <p class="mb-3 text-xs text-faint">
+                        {{ $questionBank->flatten()->count() }} approved
+                        {{ Str::plural('question', $questionBank->flatten()->count()) }} for this subject.
+                    </p>
+
+                    <form method="POST" action="{{ route('teacher.exams.questions.from-bank', $exam) }}"
+                          x-data="{ picked: 0 }">
+                        @csrf
+                        <div class="max-h-80 space-y-3 overflow-y-auto pe-1">
+                            @foreach ($questionBank as $topic => $rows)
+                                <div>
+                                    <p class="mb-1 text-xs font-medium text-muted">{{ $topic }}</p>
+                                    <div class="space-y-1">
+                                        @foreach ($rows as $row)
+                                            <label class="flex cursor-pointer items-start gap-2 rounded-md p-1.5 text-xs transition-colors hover:bg-surface-sunk">
+                                                <input type="checkbox" name="bank_ids[]" value="{{ $row->id }}"
+                                                       class="checkbox mt-0.5 shrink-0"
+                                                       @change="picked += $event.target.checked ? 1 : -1">
+                                                <span class="min-w-0 text-ink">{{ Str::limit($row->question, 110) }}</span>
+                                            </label>
+                                        @endforeach
+                                    </div>
+                                </div>
+                            @endforeach
+                        </div>
+
+                        <button type="submit" class="btn btn-primary btn-sm mt-3 w-full" :disabled="picked === 0">
+                            Add <span x-show="picked > 0" x-cloak><span x-text="picked"></span></span> selected
+                        </button>
+                    </form>
+                @endif
+            </div>
+
         <div class="surface p-5 h-fit">
-            <div class="font-semibold text-ink mb-3">Add Question</div>
+            <div class="font-semibold text-ink mb-3">Or write a new question</div>
             <form method="POST" action="{{ route('teacher.exams.questions.store', $exam) }}" class="space-y-3">
                 @csrf
                 <div><label class="text-xs text-muted block">Question</label><textarea name="question" class="w-full border rounded px-2 py-1" rows="3" required></textarea></div>
@@ -52,6 +99,7 @@
                 <div><label class="text-xs text-muted block">Points</label><input name="points" type="number" step="0.5" value="1" class="w-full border rounded px-2 py-1"></div>
                 <button class="px-3 py-1 btn btn-primary text-sm">Add</button>
             </form>
+        </div>
         </div>
     </div>
 </x-layouts.studyai>

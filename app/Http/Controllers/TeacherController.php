@@ -17,8 +17,11 @@ use App\Models\SchoolMember;
 use App\Models\StudyGuide;
 use App\Models\Subject;
 use App\Models\Term;
+use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
@@ -140,15 +143,26 @@ class TeacherController extends Controller
         return redirect()->route('teacher.exams.show', $exam)->with('status', 'Exam created.');
     }
 
-    public function showExam(Exam $exam): View
+    public function showExam(Request $request, Exam $exam): View
     {
         $this->authorize('view', $exam);
+
         $exam->load(['questions', 'classArm']);
-        $questionBank = QuestionBank::where('school_id', $this->school()?->id)
-            ->when($exam->class_arm_id, fn ($q) => $q->where('subject_id', $exam->classArm?->subjectAssignments->first()?->subject_id))
-            ->orderBy('created_at', 'desc')
-            ->limit(50)
-            ->get();
+
+        // The exam's own subject, not one guessed from the class arm — an arm
+        // teaches many subjects, so the old first() picked an arbitrary one.
+        $alreadyAdded = $exam->questions->pluck('bank_id')->filter()->all();
+
+        $questionBank = QuestionBank::query()
+            ->where('school_id', $this->school()?->id)
+            ->forTeacher($request->user())
+            ->when($exam->subject_id, fn ($q, $id) => $q->where('subject_id', $id))
+            ->when($alreadyAdded, fn ($q) => $q->whereNotIn('id', $alreadyAdded))
+            ->orderByDesc('created_at')
+            ->limit(200)
+            ->get()
+            ->groupBy(fn ($row) => $row->topic ?: 'Other');
+
         return view('teacher.exams.show', compact('exam', 'questionBank'));
     }
 
@@ -383,7 +397,7 @@ class TeacherController extends Controller
             'source_url' => 'nullable|url',
             'document' => "nullable|file|mimes:{$accepted}|max:".config('ai.uploads.max_size_kb', 20480),
             'class_arm_id' => 'nullable|exists:class_arms,id',
-            'subject_id' => 'nullable|exists:subjects,id',
+            'subject_id' => 'required|exists:subjects,id',
         ]);
 
         // The form only offers the teacher's own class/subject pairs, but the
@@ -739,16 +753,115 @@ class TeacherController extends Controller
         return view('teacher.exams.analytics', compact('exam', 'attempts', 'avg', 'passRate', 'total'));
     }
 
-    // ── Question bank (teacher) ──
-    public function questionBankIndex(): View
+    /**
+     * Pull questions out of the bank and onto an exam.
+     *
+     * This is the point of banking: a teacher building a Maths exam draws on
+     * everything approved for Maths over the term rather than writing it all
+     * again. The bank row is copied, not referenced, so later edits to the
+     * bank do not silently rewrite an exam that has already been sat.
+     */
+    public function importBankQuestions(Request $request, Exam $exam): RedirectResponse
     {
+        $this->authorize('update', $exam);
+
+        $data = $request->validate([
+            'bank_ids' => 'required|array|min:1',
+            'bank_ids.*' => 'string',
+        ]);
+
+        // Re-fetch through the teacher's own scope: an id posted from a stale
+        // page — or someone else's — must not become a way into another
+        // subject's bank.
+        $rows = QuestionBank::query()
+            ->where('school_id', $this->school()?->id)
+            ->forTeacher($request->user())
+            ->whereIn('id', $data['bank_ids'])
+            ->get();
+
+        if ($rows->isEmpty()) {
+            return back()->withErrors(['bank_ids' => 'None of those questions are available to you.']);
+        }
+
+        // Adding the same question twice is a mistake, not an intention.
+        $existing = $exam->questions()->whereNotNull('bank_id')->pluck('bank_id')->all();
+        $rows = $rows->reject(fn ($row) => in_array($row->id, $existing, true));
+
+        if ($rows->isEmpty()) {
+            return back()->with('status', 'Those questions are already on this exam.');
+        }
+
+        $order = (int) $exam->questions()->max('order');
+
+        DB::transaction(function () use ($rows, $exam, &$order) {
+            foreach ($rows as $row) {
+                ExamQuestion::create([
+                    'exam_id' => $exam->id,
+                    'bank_id' => $row->id,
+                    'question' => $row->question,
+                    'type' => $row->type,
+                    'options' => $row->options,
+                    'answer' => $row->answer,
+                    'explanation' => $row->explanation,
+                    'points' => 1,
+                    'order' => ++$order,
+                ]);
+            }
+        });
+
+        return back()->with('status', $rows->count().' '.Str::plural('question', $rows->count()).' added from the bank.');
+    }
+
+    // ── Question bank (teacher) ──
+    /**
+     * The teacher's question bank, scoped to the subjects they teach.
+     *
+     * The bank fills up on approval: every reviewed quiz question joins its
+     * subject's pool, so by the end of a term a teacher has everything they
+     * have had approved, grouped by the study guide it came from.
+     */
+    public function questionBankIndex(Request $request): View
+    {
+        $user = $request->user();
         $school = $this->school();
-        $subjects = Subject::where('school_id', $school?->id)->orderBy('name')->get();
-        $questions = QuestionBank::where('school_id', $school?->id)
+
+        // Only the subjects this teacher is assigned to; admins see all.
+        $subjects = Subject::where('school_id', $school?->id)
+            ->when(! $user->isAdmin(), fn ($q) => $q->whereIn(
+                'id',
+                ClassSubjectAssignment::where('teacher_id', $user->id)->select('subject_id')
+            ))
+            ->orderBy('name')
+            ->get();
+
+        $filters = $request->validate([
+            'subject' => 'nullable|string',
+            'topic' => 'nullable|string',
+            'q' => 'nullable|string|max:200',
+        ]);
+
+        $questions = QuestionBank::query()
+            ->where('school_id', $school?->id)
+            ->forTeacher($user)
             ->with('subject')
-            ->orderBy('created_at', 'desc')
-            ->paginate(30);
-        return view('teacher.question-bank.index', compact('questions', 'subjects'));
+            ->when($filters['subject'] ?? null, fn ($q, $id) => $q->where('subject_id', $id))
+            ->when($filters['topic'] ?? null, fn ($q, $topic) => $q->where('topic', $topic))
+            ->when($filters['q'] ?? null, fn ($q, $term) => $q->where('question', 'like', '%'.$term.'%'))
+            ->orderByDesc('created_at')
+            ->paginate(30)
+            ->withQueryString();
+
+        // Topic list for the filter, limited to what this teacher can see.
+        $topics = QuestionBank::query()
+            ->where('school_id', $school?->id)
+            ->forTeacher($user)
+            ->when($filters['subject'] ?? null, fn ($q, $id) => $q->where('subject_id', $id))
+            ->whereNotNull('topic')
+            ->distinct()
+            ->orderBy('topic')
+            ->pluck('topic');
+
+        return view('teacher.question-bank.index', compact('questions', 'subjects', 'topics', 'filters'));
     }
 
     public function questionBankStore(Request $request): RedirectResponse
@@ -763,6 +876,11 @@ class TeacherController extends Controller
             'difficulty' => 'nullable|integer|min:1|max:5',
             'subject_id' => 'nullable|exists:subjects,id',
         ]);
+        abort_unless(
+            $this->canUseBankSubject($request->user(), $data['subject_id'] ?? null, $school?->id),
+            403
+        );
+
         QuestionBank::create([
             'school_id' => $school?->id,
             'subject_id' => $data['subject_id'] ?? null,
@@ -777,13 +895,40 @@ class TeacherController extends Controller
         return back()->with('status', 'Question added to bank.');
     }
 
-    public function questionBankDestroy(QuestionBank $qb): RedirectResponse
+    public function questionBankDestroy(Request $request, QuestionBank $qb): RedirectResponse
     {
-        $school = $this->school();
-        if ($qb->school_id !== $school?->id) {
-            abort(403);
-        }
+        // School alone is not enough: a bank belongs to a subject, and a
+        // teacher who does not teach it has no business editing it.
+        abort_unless($this->canUseBankSubject($request->user(), $qb->subject_id, $qb->school_id), 403);
+
         $qb->delete();
-        return back()->with('status', 'Question removed.');
+
+        return back()->with('status', 'Question removed from the bank.');
+    }
+
+    /**
+     * May this user read and write the bank for a subject?
+     *
+     * Admins oversee the whole school. A teacher is limited to the subjects
+     * they are actually assigned to, which is what makes the bank feel like
+     * their own rather than a shared dumping ground.
+     */
+    private function canUseBankSubject(User $user, ?string $subjectId, ?string $schoolId): bool
+    {
+        if ($schoolId !== $this->school()?->id) {
+            return false;
+        }
+
+        if ($user->isAdmin()) {
+            return true;
+        }
+
+        if (! $subjectId) {
+            return false;
+        }
+
+        return ClassSubjectAssignment::where('teacher_id', $user->id)
+            ->where('subject_id', $subjectId)
+            ->exists();
     }
 }
