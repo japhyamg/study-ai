@@ -281,9 +281,11 @@ class TeacherController extends Controller
     public function materialsIndex(): View
     {
         $school = $this->school();
+        // Scope to this school first, then widen within it. An ungrouped
+        // orWhere here would have matched every material the user created in
+        // *any* school, escaping the tenant boundary.
         $materials = Material::with('classArm')
-            ->where('created_by', auth()->id())
-            ->orWhere('school_id', $school?->id)
+            ->where('school_id', $school?->id)
             ->orderBy('created_at', 'desc')
             ->paginate(20);
         return view('teacher.materials.index', compact('materials'));

@@ -32,9 +32,20 @@
                         <td class="px-4 py-2 text-xs text-faint">
                             {{ $m->published_at?->diffForHumans() ?? '—' }}
                         </td>
-                        <td class="px-4 py-2 flex gap-2">
-                            <a href="{{ route('learning.materials.show', $m) }}" class="text-accent text-xs">Open</a>
-                            <a href="{{ route('teacher.materials.edit', $m) }}" class="text-muted text-xs">Edit</a>
+                        <td class="px-4 py-2">
+                            <div class="flex items-center gap-3">
+                                <a href="{{ route('learning.materials.show', $m) }}" class="text-accent text-xs">Open</a>
+                                <a href="{{ route('teacher.materials.edit', $m) }}" class="text-muted text-xs">Edit</a>
+                                @can('delete', $m)
+                                    <form method="POST" action="{{ route('teacher.materials.destroy', $m) }}"
+                                          x-data
+                                          @submit.prevent="confirm('Delete “{{ addslashes($m->title) }}”? {{ $m->isPublished() ? 'Students will lose access to it immediately. ' : '' }}Its study guide, flashcards and questions go with it. This cannot be undone.') && $el.submit()">
+                                        @csrf
+                                        @method('DELETE')
+                                        <button type="submit" class="text-xs text-danger">Delete</button>
+                                    </form>
+                                @endcan
+                            </div>
                         </td>
                     </tr>
                 @empty

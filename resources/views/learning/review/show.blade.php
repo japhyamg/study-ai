@@ -127,6 +127,17 @@
                         Submit for review
                     </button>
                 @endif
+
+                @can('delete', $material)
+                    <form method="POST" action="{{ route('teacher.materials.destroy', $material) }}"
+                          @submit.prevent="confirm('Delete “{{ addslashes($material->title) }}”? {{ $material->isPublished() ? 'Students will lose access to it immediately. ' : '' }}Its study guide, flashcards and questions go with it. This cannot be undone.') && $el.submit()">
+                        @csrf
+                        @method('DELETE')
+                        <button type="submit" class="btn btn-ghost btn-sm text-danger">
+                            <x-icon name="trash" /> Delete
+                        </button>
+                    </form>
+                @endcan
             </div>
         </div>
 

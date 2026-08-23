@@ -55,6 +55,24 @@ class MaterialGenerationController extends Controller
 
         $this->queueGeneration($material, $data['type'], $config);
 
+        // On the sync driver the job has already run to completion by the
+        // time we get here, so "this will take a moment" would be a lie —
+        // and it sat next to the failure panel contradicting it. Report the
+        // state the material is actually in.
+        $material->refresh();
+
+        if ($material->workflow_state === Material::STATE_AI_FAILED) {
+            // The panel on the page already carries the reason and the
+            // reference; a second copy in a flash would just be noise.
+            return back();
+        }
+
+        if ($material->workflow_state === Material::STATE_AI_COMPLETED) {
+            return back()->with('status', $hadContent
+                ? 'Content regenerated.'
+                : 'Study content generated.');
+        }
+
         return back()->with('status', $hadContent
             ? 'Regenerating — this will take a moment.'
             : 'Generating study content — this will take a moment.');
