@@ -1,5 +1,6 @@
 <?php
 
+use App\Exceptions\AiServiceException;
 use App\Http\Middleware\EnsureRole;
 use App\Http\Middleware\EnsureTwoFactorIsConfirmed;
 use App\Http\Middleware\EnsureUserBelongsToSchool;
@@ -8,6 +9,7 @@ use App\Http\Middleware\ResolveTenant;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Route;
 
 return Application::configure(basePath: dirname(__DIR__))
@@ -86,5 +88,25 @@ return Application::configure(basePath: dirname(__DIR__))
         });
     })
     ->withExceptions(function (Exceptions $exceptions): void {
-        //
+        // Give every reported exception a short reference and attach it to the
+        // log line. The same code is shown on the error page, so a user can
+        // quote six characters instead of pasting a stack trace — and we can
+        // find the exact entry without guessing from a timestamp.
+        $exceptions->context(fn () => ['reference' => app('error.reference')]);
+
+        // AI failures are already translated where they are caught. This is the
+        // safety net for anything that escapes to an HTTP response: log the
+        // detail, show the user plain language.
+        $exceptions->render(function (AiServiceException $e, \Illuminate\Http\Request $request) {
+            Log::error('AI request failed', [
+                'reference' => $e->reference(),
+                'detail' => $e->privateDetail(),
+            ]);
+
+            $payload = ['message' => $e->publicMessage(), 'reference' => $e->reference()];
+
+            return $request->expectsJson()
+                ? response()->json($payload, 503)
+                : back()->with('error', $e->publicMessage().' (ref '.$e->reference().')');
+        });
     })->create();

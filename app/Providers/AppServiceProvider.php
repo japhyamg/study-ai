@@ -35,7 +35,10 @@ class AppServiceProvider extends AuthServiceProvider
      */
     public function register(): void
     {
-        //
+        // One short reference per request, shared by the log line and the
+        // error page so a user can quote six characters instead of a stack
+        // trace. Resolved lazily: most requests never need it.
+        $this->app->singleton('error.reference', fn () => strtoupper(substr(bin2hex(random_bytes(4)), 0, 6)));
     }
 
     /**

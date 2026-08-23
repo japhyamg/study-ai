@@ -290,18 +290,40 @@
                     <div class="page-head">{{ $header }}</div>
                 @endif
 
-                {{-- Flash messages --}}
+                {{-- Flash messages.
+
+                     These are transient confirmations, so they dismiss
+                     themselves. Validation errors below do NOT: the user has
+                     to act on those, and a message that vanishes mid-read is
+                     worse than no message. Dismissal is opacity + a delayed
+                     collapse so the layout does not jump while it fades. --}}
                 @if (session('status'))
-                    <div class="alert alert-ok mb-4" role="status">
+                    <div class="alert alert-ok mb-4" role="status"
+                         x-data="{ show: true }"
+                         x-init="setTimeout(() => show = false, 6000)"
+                         x-show="show"
+                         x-transition.opacity.duration.400ms>
                         <x-icon name="check-circle" class="mt-px flex-none" />
                         <span>{{ session('status') }}</span>
+                        <button type="button" class="ms-auto shrink-0 opacity-60 hover:opacity-100"
+                                aria-label="Dismiss" @click="show = false">
+                            <x-icon name="x" />
+                        </button>
                     </div>
                 @endif
 
                 @if (session('error'))
-                    <div class="alert alert-danger mb-4" role="alert">
+                    <div class="alert alert-danger mb-4" role="alert"
+                         x-data="{ show: true }"
+                         x-init="setTimeout(() => show = false, 10000)"
+                         x-show="show"
+                         x-transition.opacity.duration.400ms>
                         <x-icon name="alert-circle" class="mt-px flex-none" />
                         <span>{{ session('error') }}</span>
+                        <button type="button" class="ms-auto shrink-0 opacity-60 hover:opacity-100"
+                                aria-label="Dismiss" @click="show = false">
+                            <x-icon name="x" />
+                        </button>
                     </div>
                 @endif
 

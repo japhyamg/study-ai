@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Exceptions\AiServiceException;
 use App\Models\Flashcard;
 use App\Models\Material;
 use App\Models\ProcessingJob;
@@ -116,16 +117,38 @@ class AiContentService
             ]);
         } catch (TokenLimitError $e) {
             // Distinguish "out of budget" from "the model broke" — the teacher
-            // can act on the first and not the second.
+            // can act on the first and not the second. This message is written
+            // for teachers, so it is safe to show as-is.
             $this->failJob($job, $material, $e->getMessage());
-        } catch (Throwable $e) {
+        } catch (AiServiceException $e) {
+            // Public message for the user, raw provider detail for the log,
+            // joined by a reference the teacher can quote to support.
             Log::error('AI generation failed', [
                 'material_id' => $material->id,
                 'job_id' => $job->id,
-                'error' => $e->getMessage(),
+                'reference' => $e->reference(),
+                'detail' => $e->privateDetail(),
             ]);
 
-            $this->failJob($job, $material, $e->getMessage());
+            $this->failJob($job, $material, $e->publicMessage().' (ref '.$e->reference().')');
+        } catch (Throwable $e) {
+            // Anything unanticipated: never surface the raw message. It could
+            // be a stack-trace-ish string, a DB error, or provider output.
+            $reference = strtoupper(substr(bin2hex(random_bytes(4)), 0, 6));
+
+            Log::error('AI generation failed', [
+                'material_id' => $material->id,
+                'job_id' => $job->id,
+                'reference' => $reference,
+                'exception' => $e::class,
+                'detail' => $e->getMessage(),
+            ]);
+
+            $this->failJob(
+                $job,
+                $material,
+                'Something went wrong while generating this content. Try again — if it keeps failing, quote reference '.$reference.'.'
+            );
         }
     }
 

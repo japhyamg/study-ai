@@ -150,10 +150,16 @@
                 <span class="text-muted">Generating study content. This page refreshes automatically.</span>
             </div>
         @elseif ($material->workflow_state === Material::STATE_AI_FAILED)
+            {{-- Persistent by design: this reports a state the material is
+                 still in, not a passing event, and the header already offers
+                 Regenerate. The stored message is user-safe: provider output
+                 is translated in AiContentService and only the reference code
+                 survives. --}}
             <div class="mt-4 rounded-md border border-danger/30 bg-danger/5 px-4 py-3 text-sm">
-                <div class="font-medium text-danger">Generation failed</div>
+                <div class="font-medium text-danger">Generation didn't finish</div>
                 <p class="mt-1 text-muted">
-                    {{ $material->processingJobs()->latest()->first()?->error ?? 'Something went wrong.' }}
+                    {{ $material->processingJobs()->latest()->first()?->error
+                        ?? 'Something went wrong while generating this content. Try again.' }}
                 </p>
             </div>
         @endif

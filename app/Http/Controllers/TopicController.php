@@ -2,10 +2,12 @@
 
 namespace App\Http\Controllers;
 
+use App\Exceptions\AiServiceException;
 use App\Models\Topic;
 use App\Services\AiService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\View\View;
 
 class TopicController extends Controller
@@ -34,8 +36,28 @@ class TopicController extends Controller
             $result = $data['topic']
                 ? $ai->generateTopics($data['topic'], $context)
                 : [];
+        } catch (AiServiceException $e) {
+            Log::error('Topic generation failed', [
+                'reference' => $e->reference(),
+                'detail' => $e->privateDetail(),
+            ]);
+
+            return back()->with('error', $e->publicMessage().' (ref '.$e->reference().')');
         } catch (\Throwable $e) {
-            return back()->with('error', 'Topic generation failed: ' . $e->getMessage());
+            // Never echo a raw exception message: it can carry provider output,
+            // query fragments or file paths.
+            $reference = strtoupper(substr(bin2hex(random_bytes(4)), 0, 6));
+
+            Log::error('Topic generation failed', [
+                'reference' => $reference,
+                'exception' => $e::class,
+                'detail' => $e->getMessage(),
+            ]);
+
+            return back()->with(
+                'error',
+                'Topics could not be generated just now. Try again — if it keeps failing, quote reference '.$reference.'.'
+            );
         }
 
         // Persist each generated topic

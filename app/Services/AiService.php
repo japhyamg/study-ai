@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Exceptions\AiServiceException;
 use App\Models\AiCache;
 use App\Models\AiProvider;
 use App\Models\TokenUsage;
@@ -340,7 +341,11 @@ SOURCE (JSON: sections[] with h = heading, t = text):
         $provider = $this->getActiveProvider();
 
         if (! $provider) {
-            throw new \RuntimeException('No active AI provider is configured. Add one under Super Admin → AI providers.');
+            throw new AiServiceException(
+                'AI generation is not set up yet. An administrator needs to configure an AI provider.',
+                'No active AiProvider row found.',
+                AiServiceException::KIND_ACTIONABLE,
+            );
         }
 
         // Enforce the teacher's monthly budget before spending anything.
@@ -362,7 +367,9 @@ SOURCE (JSON: sections[] with h = heading, t = text):
             ]);
 
         if ($response->failed()) {
-            throw new \RuntimeException('AI HTTP error: '.$response->status().' '.$response->body());
+            // The provider body can contain key state and account detail, so
+            // it is logged rather than thrown outward.
+            throw AiServiceException::fromHttp($response->status(), (string) $response->body());
         }
 
         $json = $response->json();
@@ -380,7 +387,7 @@ SOURCE (JSON: sections[] with h = heading, t = text):
         $text = $json['choices'][0]['message']['content'] ?? '';
 
         if (trim($text) === '') {
-            throw new \RuntimeException('The AI returned an empty response. Try again.');
+            throw new AiServiceException('The AI service returned nothing. Try again.', 'Empty completion body.');
         }
 
         return $this->parseJson($text, $generationType);
@@ -505,7 +512,7 @@ SOURCE (JSON: sections[] with h = heading, t = text):
         $text = JsonRepair::stripControlBytes(JsonRepair::stripFences($text));
 
         if (trim($text) === '') {
-            throw new \RuntimeException('The AI returned an empty response.');
+            throw new AiServiceException('The AI service returned nothing. Try again.', 'Empty completion body.');
         }
 
         $decoded = json_decode($text, true, 512, JSON_INVALID_UTF8_IGNORE);
@@ -555,8 +562,9 @@ SOURCE (JSON: sections[] with h = heading, t = text):
             'head' => mb_substr($text, 0, 400),
         ]);
 
-        throw new \RuntimeException(
-            'The AI returned a response that could not be read. Try generating again — if it keeps happening, reduce the amount of source text.'
+        throw new AiServiceException(
+            'The AI returned a response that could not be read. Try generating again — if it keeps happening, reduce the amount of source text.',
+            'Unparseable JSON after repair: '.json_last_error_msg(),
         );
     }
 
