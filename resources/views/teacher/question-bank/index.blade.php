@@ -9,8 +9,7 @@
      */
 @endphp
 
-<x-layouts.studyai title="Question bank"
-                   subtitle="Approved questions, collected by subject.">
+<x-layouts.studyai title="Question bank">
 
     @if ($subjects->isEmpty())
         <x-ui.empty icon="database" title="No subjects assigned"

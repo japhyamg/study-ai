@@ -19,22 +19,24 @@
     ];
 @endphp
 
-<x-layouts.studyai :title="$subject->name"
-                   subtitle="Question bank">
-
-    <x-slot:actions>
-        <button type="button" class="btn btn-outline btn-sm" @click="$dispatch('bank-add')">
-            <x-icon name="plus" /> Add question
-        </button>
-    </x-slot:actions>
-
-    <div x-data="{ adding: false }" @bank-add.window="adding = true"
-         @bank-form-cancel="adding = false">
+<x-layouts.studyai title="Question bank">
+    <div x-data="{ adding: false }" @bank-form-cancel="adding = false">
 
         <a href="{{ route('teacher.question-bank.index') }}" class="text-xs text-accent">← All subjects</a>
 
+        {{-- The subject and its action belong to the page, not the app chrome.
+             Keeping the button here also means it can drive the panel directly
+             instead of dispatching a window event into this scope. --}}
+        <div class="mt-3 mb-4 flex flex-wrap items-end justify-between gap-3">
+            <h2 class="font-display text-lg text-ink">{{ $subject->name }}</h2>
+
+            <x-ui.button type="button" icon="plus" x-on:click="adding = ! adding">
+                Add question
+            </x-ui.button>
+        </div>
+
         {{-- ── Add by hand ── --}}
-        <div class="surface mt-3 p-5" x-show="adding" x-cloak>
+        <div class="surface mb-4 p-5" x-show="adding" x-cloak>
             <x-bank-question-form :action="route('teacher.question-bank.store')"
                                   :subject="$subject" />
         </div>

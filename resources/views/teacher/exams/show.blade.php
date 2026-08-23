@@ -13,7 +13,7 @@
     $bankCount = $questionBank->flatten()->count();
 @endphp
 
-<x-layouts.studyai :title="$exam->title" subtitle="Exam setup">
+<x-layouts.studyai title="Exams">
     <a href="{{ route('teacher.exams.index') }}" class="mb-3 inline-block text-xs text-accent">← All exams</a>
 
     @if (session('status'))

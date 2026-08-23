@@ -382,7 +382,9 @@ class ExamSettingsTest extends TestCase
         $this->actingAs($this->mathsTeacher)
             ->get(route('teacher.exams.show', $exam))
             ->assertOk()
-            ->assertSee('Exam setup')
+            // The exam's own title and actions render on the page, not in the
+            // topbar, which carries only the section label.
+            ->assertSee('Mid-term')
             ->assertSee('Edit settings')
             // The duration, pass mark and attempt count are on the page now,
             // not hidden behind the edit form.
