@@ -114,29 +114,28 @@ class TeacherController extends Controller
         return view('teacher.exams.index', compact('exams', 'status'));
     }
 
-    public function createExam(): View
+    public function createExam(Request $request): View
     {
         $school = $this->school();
+
         $classes = ClassArm::with('classLevel')->where('school_id', $school?->id)->get()
             ->sortBy(fn ($a) => [$a->classLevel?->position ?? 0, $a->name])->values();
-        return view('teacher.exams.create', compact('classes'));
+
+        // The exam's subject decides which question bank it can draw on, so it
+        // has to be chosen here rather than guessed later.
+        $subjects = $this->bankSubjects($request->user(), $school?->id);
+
+        return view('teacher.exams.create', compact('classes', 'subjects'));
     }
 
     public function storeExam(Request $request): RedirectResponse
     {
         $school = $this->school();
-        $data = $request->validate([
-            'title' => 'required|string|max:255',
-            'description' => 'nullable|string|max:2000',
-            'class_arm_id' => 'nullable|exists:class_arms,id',
-            'duration_minutes' => 'nullable|integer|min:1',
-            'pass_mark' => 'nullable|numeric|min:0|max:100',
-        ]);
+        $data = $this->validateExam($request);
 
         $data['school_id'] = $school?->id;
-        $data['created_by'] = auth()->id();
+        $data['created_by'] = $request->user()->id;
         $data['status'] = Exam::STATUS_DRAFT;
-        $data['pass_mark'] = $data['pass_mark'] ?? 50;
 
         $exam = Exam::create($data);
 
@@ -166,26 +165,63 @@ class TeacherController extends Controller
         return view('teacher.exams.show', compact('exam', 'questionBank'));
     }
 
-    public function editExam(Exam $exam): View
+    public function editExam(Request $request, Exam $exam): View
     {
         $this->authorize('update', $exam);
         $school = $this->school();
         $classes = ClassArm::with('classLevel')->where('school_id', $school?->id)->get()
             ->sortBy(fn ($a) => [$a->classLevel?->position ?? 0, $a->name])->values();
-        return view('teacher.exams.edit', compact('exam', 'classes'));
+
+        $subjects = $this->bankSubjects($request->user(), $school?->id);
+
+        return view('teacher.exams.edit', compact('exam', 'classes', 'subjects'));
+    }
+
+    /**
+     * Shared rules for creating and updating an exam.
+     *
+     * Only settings the app actually enforces are accepted here: the duration
+     * drives the countdown in the exam runner, max_attempts is checked before a
+     * new attempt is created, and pass_mark decides the pass flag on submit.
+     * Settings that exist as columns but nothing reads yet (shuffling, negative
+     * marking, result visibility) are deliberately left out rather than shown
+     * as switches that quietly do nothing.
+     */
+    private function validateExam(Request $request): array
+    {
+        $data = $request->validate([
+            'title' => 'required|string|max:255',
+            'description' => 'nullable|string|max:2000',
+            'class_arm_id' => 'nullable|exists:class_arms,id',
+            'subject_id' => 'nullable|exists:subjects,id',
+            'duration' => 'nullable|integer|min:1|max:600',
+            'pass_mark' => 'nullable|numeric|min:0|max:100',
+            'max_attempts' => 'nullable|integer|min:1|max:10',
+        ], [], [
+            'class_arm_id' => 'class',
+            'duration' => 'duration',
+        ]);
+
+        // A teacher may only tie an exam to a subject they are assigned to,
+        // otherwise picking a subject would expose another teacher's bank.
+        if (! empty($data['subject_id'])
+            && ! $this->canUseBankSubject($request->user(), $data['subject_id'], $this->school()?->id)) {
+            throw ValidationException::withMessages([
+                'subject_id' => 'You are not assigned to that subject.',
+            ]);
+        }
+
+        $data['pass_mark'] = $data['pass_mark'] ?? 50;
+        $data['max_attempts'] = $data['max_attempts'] ?? 1;
+
+        return $data;
     }
 
     public function updateExam(Request $request, Exam $exam): RedirectResponse
     {
         $this->authorize('update', $exam);
-        $data = $request->validate([
-            'title' => 'required|string|max:255',
-            'description' => 'nullable|string|max:2000',
-            'class_arm_id' => 'nullable|exists:class_arms,id',
-            'duration_minutes' => 'nullable|integer|min:1',
-            'pass_mark' => 'nullable|numeric|min:0|max:100',
-        ]);
-        $exam->update($data);
+
+        $exam->update($this->validateExam($request));
         return redirect()->route('teacher.exams.show', $exam)->with('status', 'Exam updated.');
     }
 
