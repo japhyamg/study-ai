@@ -10,14 +10,16 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 
 /**
- * Re-running AI generation for a material that already has extracted text.
+ * Running AI generation for a material that already has extracted text.
  *
- * Creating a material (including the upload and text extraction) is handled by
- * TeacherController::materialsStore — there is one upload form, not two.
+ * Upload and text extraction happen in TeacherController::materialsStore;
+ * generation is a separate, deliberate step so the teacher can see what was
+ * actually pulled out of their file before spending tokens on it. First run
+ * and re-run are the same operation — the only difference is whether anything
+ * gets replaced.
  */
 class MaterialGenerationController extends Controller
 {
-    /** Re-run generation for a material that already has text. */
     public function regenerate(Request $request, Material $material): RedirectResponse
     {
         $this->authorize('update', $material);
@@ -46,9 +48,16 @@ class MaterialGenerationController extends Controller
                 ?? ['multiple-choice'],
         ];
 
+        $hadContent = $material->hasGeneratedContent();
+
+        // Remember the choice so the next run defaults to it.
+        $material->update(['generation_config' => $config]);
+
         $this->queueGeneration($material, $data['type'], $config);
 
-        return back()->with('status', 'Regenerating — this will take a moment.');
+        return back()->with('status', $hadContent
+            ? 'Regenerating — this will take a moment.'
+            : 'Generating study content — this will take a moment.');
     }
 
     /**

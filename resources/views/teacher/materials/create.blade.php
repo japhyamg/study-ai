@@ -3,6 +3,13 @@
 
     <a href="{{ route('teacher.materials.index') }}" class="text-xs text-accent">← Back to study guides</a>
 
+    @if ($unassigned)
+        <div class="mt-4">
+            <x-ui.empty icon="users" title="No classes assigned yet"
+                        message="You need to be assigned a subject in a class before you can add study material. Ask an administrator to set that up." />
+        </div>
+    @else
+
     <form method="POST" action="{{ route('teacher.materials.store') }}" enctype="multipart/form-data"
           class="mt-4 max-w-3xl space-y-5" x-data="materialForm()">
         @csrf
@@ -33,9 +40,10 @@
                     </x-ui.field>
                 </div>
 
-                <x-ui.field label="Class" name="class_arm_id" hint="Leave blank to share with the whole school.">
-                    <select name="class_arm_id" class="w-full rounded-md border border-line bg-surface px-3 py-2 text-sm">
-                        <option value="">All classes</option>
+                <x-ui.field label="Class" name="class_arm_id" required>
+                    <select name="class_arm_id" required x-model="classArm"
+                            class="w-full rounded-md border border-line bg-surface px-3 py-2 text-sm">
+                        <option value="">Choose a class</option>
                         @foreach ($classes as $class)
                             <option value="{{ $class->id }}" @selected(old('class_arm_id') === $class->id)>
                                 {{ $class->fullName() }}
@@ -44,11 +52,15 @@
                     </select>
                 </x-ui.field>
 
-                <x-ui.field label="Subject" name="subject_id">
-                    <select name="subject_id" class="w-full rounded-md border border-line bg-surface px-3 py-2 text-sm">
-                        <option value="">No subject</option>
+                <x-ui.field label="Subject" name="subject_id" required
+                            hint="Only the subjects you teach are listed.">
+                    <select name="subject_id" required
+                            class="w-full rounded-md border border-line bg-surface px-3 py-2 text-sm">
+                        <option value="">Choose a subject</option>
                         @foreach ($subjects as $subject)
-                            <option value="{{ $subject->id }}" @selected(old('subject_id') === $subject->id)>
+                            <option value="{{ $subject->id }}"
+                                    x-show="allows('{{ $subject->id }}')"
+                                    @selected(old('subject_id') === $subject->id)>
                                 {{ $subject->name }}
                             </option>
                         @endforeach
@@ -142,49 +154,17 @@
             </div>
         </x-ui.card>
 
-        {{-- ── Generation ── --}}
-        <x-ui.card title="What to generate">
-            <div class="space-y-4">
-                <label class="flex items-start gap-3">
-                    <input type="checkbox" name="generate" value="1" checked x-model="generate" class="mt-0.5">
-                    <span>
-                        <span class="text-sm text-ink">Generate study content now</span>
-                        <span class="block text-xs text-faint">
-                            A study guide, flashcards and a quiz. Uncheck to save as a draft.
-                        </span>
-                    </span>
-                </label>
-
-                <div x-show="generate" x-cloak class="grid gap-4 border-t border-line pt-4 sm:grid-cols-2">
-                    <x-ui.field label="Quiz questions" name="question_count">
-                        <div class="flex items-center gap-3">
-                            <input type="range" name="question_count" min="3" max="30"
-                                   x-model="questionCount" class="flex-1">
-                            <span class="tnum w-8 text-sm text-ink" x-text="questionCount"></span>
-                        </div>
-                    </x-ui.field>
-
-                    <x-ui.field label="Question types" name="question_types">
-                        <div class="space-y-1.5">
-                            @php $selected = old('question_types', ['multiple-choice']); @endphp
-                            @foreach (['multiple-choice' => 'Multiple choice', 'true-false' => 'True / false', 'fill-blank' => 'Fill in the blank', 'short-answer' => 'Short answer'] as $value => $label)
-                                <label class="flex items-center gap-2 text-sm">
-                                    <input type="checkbox" name="question_types[]" value="{{ $value }}"
-                                           @checked(in_array($value, $selected, true))>
-                                    {{ $label }}
-                                </label>
-                            @endforeach
-                        </div>
-                    </x-ui.field>
-                </div>
-            </div>
-        </x-ui.card>
-
         <div class="flex items-center gap-3">
             <x-ui.button type="submit">Create</x-ui.button>
             <a href="{{ route('teacher.materials.index') }}" class="text-sm text-muted hover:text-ink">Cancel</a>
         </div>
+
+        <p class="text-xs text-faint">
+            You'll choose what to generate on the next page, once you can see the extracted text.
+        </p>
     </form>
+
+    @endif
 
     @push('scripts')
         <script>
@@ -193,8 +173,21 @@
                     mode: @js(old('source_url') ? 'link' : (old('content') ? 'text' : 'file')),
                     linkType: @js(old('type', 'link')),
                     fileName: '',
-                    generate: true,
-                    questionCount: {{ (int) old('question_count', config('ai.defaults.question_count', 10)) }},
+                    classArm: @js(old('class_arm_id', '')),
+
+                    // subject ids the teacher may use, keyed by class arm
+                    subjectsByClass: @js($subjectsByClass),
+
+                    /**
+                     * Narrow the subject list once a class is chosen, so a
+                     * teacher who takes Maths in one class and English in
+                     * another is not offered the wrong pairing.
+                     */
+                    allows(subjectId) {
+                        if (!this.classArm) return true;
+                        const allowed = this.subjectsByClass[this.classArm];
+                        return !allowed || allowed.includes(subjectId);
+                    },
 
                     handleDrop(event) {
                         const input = event.currentTarget.querySelector('input[type=file]');

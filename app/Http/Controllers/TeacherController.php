@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\ClassArm;
+use App\Models\ClassSubjectAssignment;
 use App\Models\Exam;
 use App\Models\ExamAttempt;
 use App\Models\ExamQuestion;
@@ -290,11 +291,80 @@ class TeacherController extends Controller
 
     public function materialsCreate(): View
     {
+        return view('teacher.materials.create', $this->assignmentOptions());
+    }
+
+    /**
+     * Class and subject choices for the material forms.
+     *
+     * A teacher writes material for the subjects they actually teach, so these
+     * come from their own subject assignments rather than the school's full
+     * catalogue. Admins are not assigned to classes but must be able to file
+     * material against any of them, so they still see everything — as does a
+     * teacher with no assignments yet, since that is an admin setup gap rather
+     * than a reason to lock them out.
+     *
+     * @return array<string, mixed>
+     */
+    private function assignmentOptions(?Material $material = null): array
+    {
+        $user = auth()->user();
         $school = $this->school();
-        $classes = ClassArm::with('classLevel')->where('school_id', $school?->id)->get()
-            ->sortBy(fn ($a) => [$a->classLevel?->position ?? 0, $a->name])->values();
-        $subjects = Subject::where('school_id', $school?->id)->orderBy('name')->get();
-        return view('teacher.materials.create', compact('classes', 'subjects'));
+
+        $assignments = ClassSubjectAssignment::with(['classArm.classLevel', 'subject'])
+            ->where('school_id', $school?->id)
+            ->where('teacher_id', $user->id)
+            ->get();
+
+        $isAdmin = $user->roleInSchool() === SchoolMember::ROLE_ADMIN;
+        $scoped = ! $isAdmin && $assignments->isNotEmpty();
+
+        if ($scoped) {
+            $classes = $assignments->pluck('classArm')
+                ->filter()
+                ->unique('id')
+                ->sortBy(fn ($arm) => [$arm->classLevel?->position ?? 0, $arm->name])
+                ->values();
+
+            $subjects = $assignments->pluck('subject')
+                ->filter()
+                ->unique('id')
+                ->sortBy('name')
+                ->values();
+        } else {
+            $classes = ClassArm::with('classLevel')
+                ->where('school_id', $school?->id)
+                ->get()
+                ->sortBy(fn ($arm) => [$arm->classLevel?->position ?? 0, $arm->name])
+                ->values();
+
+            $subjects = Subject::where('school_id', $school?->id)->orderBy('name')->get();
+        }
+
+        // When editing, keep whatever the material is already filed under in
+        // the list even if the teacher's assignments have since changed —
+        // otherwise saving the form would silently move it somewhere else.
+        if ($scoped && $material) {
+            if ($material->classArm && ! $classes->contains('id', $material->class_arm_id)) {
+                $classes = $classes->push($material->classArm)->values();
+            }
+
+            if ($material->subject && ! $subjects->contains('id', $material->subject_id)) {
+                $subjects = $subjects->push($material->subject)->values();
+            }
+        }
+
+        return [
+            'classes' => $classes,
+            'subjects' => $subjects,
+            // Which subjects belong to which arm, so choosing a class can
+            // narrow the subject list in the browser.
+            'subjectsByClass' => $assignments
+                ->groupBy('class_arm_id')
+                ->map(fn ($group) => $group->pluck('subject_id')->filter()->values()->all()),
+            // A real state worth naming, not an error.
+            'unassigned' => ! $isAdmin && $assignments->isEmpty(),
+        ];
     }
 
     public function materialsStore(Request $request): RedirectResponse
@@ -311,11 +381,13 @@ class TeacherController extends Controller
             'document' => "nullable|file|mimes:{$accepted}|max:".config('ai.uploads.max_size_kb', 20480),
             'class_arm_id' => 'nullable|exists:class_arms,id',
             'subject_id' => 'nullable|exists:subjects,id',
-            'question_count' => 'nullable|integer|min:3|max:30',
-            'question_types' => 'nullable|array',
-            'question_types.*' => 'in:multiple-choice,true-false,fill-blank,short-answer',
-            'generate' => 'nullable|boolean',
         ]);
+
+        // The form only offers the teacher's own class/subject pairs, but the
+        // form is not the security boundary — check the posted pair too.
+        if ($error = $this->assignmentError($data['class_arm_id'] ?? null, $data['subject_id'] ?? null)) {
+            return back()->withInput()->withErrors($error);
+        }
 
         $file = $request->file('document');
 
@@ -362,8 +434,8 @@ class TeacherController extends Controller
             'file_type' => $file ? $type : null,
             'file_size' => $file?->getSize(),
             'generation_config' => [
-                'questionCount' => (int) ($data['question_count'] ?? config('ai.defaults.question_count', 10)),
-                'questionTypes' => $data['question_types'] ?? ['multiple-choice'],
+                'questionCount' => (int) config('ai.defaults.question_count', 10),
+                'questionTypes' => config('ai.defaults.question_types', ['multiple-choice']),
             ],
             'status' => Material::STATUS_DRAFT,
             'workflow_state' => Material::STATE_DRAFT,
@@ -372,44 +444,68 @@ class TeacherController extends Controller
             'created_by' => auth()->id(),
         ]);
 
-        // Generation needs text; a bare link has none.
-        if ($request->boolean('generate') && filled($text)) {
-            $questionCount = (int) ($data['question_count'] ?? 10);
-            $questionTypes = $data['question_types'] ?? ['multiple-choice'];
-            $job = ProcessingJob::create([
-                'type' => ProcessingJob::TYPE_ALL,
-                'status' => ProcessingJob::STATUS_PENDING,
-                'school_id' => $school?->id,
-                'material_id' => $material->id,
-                'created_by' => auth()->id(),
-                'progress' => 0,
-                'result' => [
-                    'questionCount' => $questionCount,
-                    'questionTypes' => $questionTypes,
-                ],
-            ]);
-            $material->transitionTo(Material::STATE_AI_PROCESSING);
-            if (config('queue.default') === 'sync') {
-                app(\App\Services\AiContentService::class)->runJob($job);
-            } else {
-                \App\Jobs\GenerateAiContent::dispatch($job);
-            }
+        // Generation is a separate, deliberate step on the material's own
+        // page — the teacher picks question count and types there, having
+        // seen what was actually extracted.
+        return redirect()->route('learning.materials.show', $material)
+            ->with('status', filled($text)
+                ? 'Uploaded. Review the extracted text, then generate study content.'
+                : 'Saved as a draft.');
+    }
+
+    /**
+     * Reject a (class, subject) pair the teacher is not assigned to.
+     *
+     * Admins are exempt: they are not assigned to classes but do need to file
+     * material against any of them.
+     *
+     * @return array<string, string>|null validation errors, or null if allowed
+     */
+    private function assignmentError(?string $classArmId, ?string $subjectId): ?array
+    {
+        $user = auth()->user();
+
+        if ($user->roleInSchool() === SchoolMember::ROLE_ADMIN) {
+            return null;
         }
 
-        return redirect()->route('learning.materials.show', $material)
-            ->with('status', $request->boolean('generate') && filled($text)
-                ? 'Uploaded. Generating study content now.'
-                : 'Saved as a draft.');
+        if (! $classArmId && ! $subjectId) {
+            return null;
+        }
+
+        $assignments = ClassSubjectAssignment::where('teacher_id', $user->id);
+
+        // A teacher with no assignments at all is not blocked — that is an
+        // admin setup gap, not an attempt to reach someone else's class.
+        if (! (clone $assignments)->exists()) {
+            return null;
+        }
+
+        if ($classArmId && $subjectId) {
+            $allowed = (clone $assignments)
+                ->where('class_arm_id', $classArmId)
+                ->where('subject_id', $subjectId)
+                ->exists();
+
+            return $allowed ? null : ['subject_id' => 'You do not teach that subject in that class.'];
+        }
+
+        if ($classArmId && ! (clone $assignments)->where('class_arm_id', $classArmId)->exists()) {
+            return ['class_arm_id' => 'You do not teach that class.'];
+        }
+
+        if ($subjectId && ! (clone $assignments)->where('subject_id', $subjectId)->exists()) {
+            return ['subject_id' => 'You do not teach that subject.'];
+        }
+
+        return null;
     }
 
     public function materialsEdit(Material $material): View
     {
         $this->authorize('update', $material);
-        $school = $this->school();
-        $classes = ClassArm::with('classLevel')->where('school_id', $school?->id)->get()
-            ->sortBy(fn ($a) => [$a->classLevel?->position ?? 0, $a->name])->values();
-        $subjects = Subject::where('school_id', $school?->id)->orderBy('name')->get();
-        return view('teacher.materials.edit', compact('material', 'classes', 'subjects'));
+
+        return view('teacher.materials.edit', $this->assignmentOptions($material) + compact('material'));
     }
 
     public function materialsUpdate(Request $request, Material $material): RedirectResponse
@@ -424,7 +520,15 @@ class TeacherController extends Controller
             'subject_id' => 'nullable|exists:subjects,id',
             'status' => 'nullable|in:draft,processing,ready,failed',
         ]);
+
+        // Moving a material to a class/subject the teacher does not take is
+        // the same problem as filing it there in the first place.
+        if ($error = $this->assignmentError($data['class_arm_id'] ?? null, $data['subject_id'] ?? null)) {
+            return back()->withInput()->withErrors($error);
+        }
+
         $material->update($data);
+
         return back()->with('status', 'Material updated.');
     }
 

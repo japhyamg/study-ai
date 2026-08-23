@@ -19,6 +19,16 @@
         Material::STATE_UNDER_REVIEW,
     ], true);
 
+    $hasContent = $material->hasGeneratedContent();
+    $hasText = $material->sourceText() !== '';
+
+    // Generation is available whenever the material is not mid-run and has
+    // text to work from. First run and re-run are the same action.
+    $canGenerate = $canEdit && $hasText && ! $material->isProcessing();
+
+    $config = $material->generation_config ?? [];
+    $configuredTypes = $config['questionTypes'] ?? config('ai.defaults.question_types', ['multiple-choice']);
+
     $canSubmit = $canEdit && in_array($material->workflow_state, [
         Material::STATE_DRAFT,
         Material::STATE_AI_COMPLETED,
@@ -99,6 +109,15 @@
                     </form>
                 @endif
 
+                @if ($canGenerate)
+                    <button type="button"
+                            class="btn btn-sm {{ $hasContent ? 'btn-outline' : 'btn-primary' }}"
+                            @click="$dispatch('open-generate')">
+                        <x-icon name="sparkles" />
+                        {{ $hasContent ? 'Regenerate' : 'Generate content' }}
+                    </button>
+                @endif
+
                 @if ($canSubmit)
                     <button type="button" class="btn btn-primary btn-sm" @click="$dispatch('open-submit')">
                         Submit for review
@@ -160,8 +179,29 @@
             {{-- ─────────── Study guide ─────────── --}}
             <div x-show="tab === 'guide'" x-cloak>
                 @if (! $guide || (! $sections && ! $guide->summary))
-                    <x-ui.empty icon="document" title="No study guide"
-                                message="Nothing has been generated for this material yet." />
+                    @if ($canGenerate && ! $hasContent)
+                        {{-- First visit after upload: this is the next step, so
+                             prompt it rather than reporting an absence. --}}
+                        <div class="surface p-8 text-center">
+                            <h3 class="font-medium text-ink">Ready to generate</h3>
+                            <p class="mx-auto mt-1 max-w-md text-sm text-muted">
+                                {{ number_format(mb_strlen($material->sourceText())) }} characters were extracted from
+                                {{ $material->file_name ?? 'this material' }}. Generate a study guide, flashcards and a
+                                quiz from it.
+                            </p>
+                            <div class="mt-4">
+                                <button type="button" class="btn btn-primary" @click="$dispatch('open-generate')">
+                                    <x-icon name="sparkles" /> Generate content
+                                </button>
+                            </div>
+                        </div>
+                    @elseif (! $hasText)
+                        <x-ui.empty icon="document" title="No text to work from"
+                                    message="This material has no extracted text, so nothing can be generated. Edit it and paste the content in." />
+                    @else
+                        <x-ui.empty icon="document" title="No study guide"
+                                    message="Nothing has been generated for this material yet." />
+                    @endif
                 @else
                     {{-- Title banner --}}
                     <div class="surface flex items-center gap-4 border-s-2 border-s-success p-5">
@@ -415,6 +455,71 @@
                             <div class="flex justify-end gap-2">
                                 <button type="button" class="btn btn-ghost btn-sm" @click="open = false">Cancel</button>
                                 <button type="submit" class="btn btn-danger btn-sm">Confirm rejection</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        @endif
+
+        @if ($canGenerate)
+            <div x-data="{ open: false, count: {{ (int) ($config['questionCount'] ?? config('ai.defaults.question_count', 10)) }} }"
+                 @open-generate.window="open = true" x-cloak>
+                <div x-show="open" class="fixed inset-0 z-40 bg-black/40" @click="open = false"></div>
+                <div x-show="open" class="fixed inset-0 z-50 flex items-center justify-center p-4">
+                    <div class="surface w-full max-w-md p-5" @click.outside="open = false">
+                        <h3 class="font-semibold text-ink">
+                            {{ $hasContent ? 'Regenerate content' : 'Generate study content' }}
+                        </h3>
+                        <p class="mt-1 text-sm text-muted">
+                            A study guide, flashcards and a quiz, written from this material.
+                        </p>
+
+                        @if ($hasContent)
+                            <div class="mt-3 rounded-md border border-warning/30 bg-warning/5 px-3 py-2 text-xs text-muted">
+                                This replaces the content you already have for whichever type you pick.
+                            </div>
+                        @endif
+
+                        <form method="POST" action="{{ route('learning.materials.regenerate', $material) }}"
+                              class="mt-4 space-y-4">
+                            @csrf
+
+                            <x-ui.field label="What to generate" name="type">
+                                <select name="type"
+                                        class="w-full rounded-md border border-line bg-surface px-3 py-2 text-sm">
+                                    <option value="generate_all">Everything</option>
+                                    <option value="generate_study_guide">Study guide only</option>
+                                    <option value="generate_flashcards">Flashcards only</option>
+                                    <option value="generate_questions">Quiz only</option>
+                                </select>
+                            </x-ui.field>
+
+                            <x-ui.field label="Quiz questions" name="question_count">
+                                <div class="flex items-center gap-3">
+                                    <input type="range" name="question_count" min="3" max="30"
+                                           x-model="count" class="flex-1">
+                                    <span class="tnum w-8 text-sm text-ink" x-text="count"></span>
+                                </div>
+                            </x-ui.field>
+
+                            <x-ui.field label="Question types" name="question_types">
+                                <div class="space-y-1.5">
+                                    @foreach (['multiple-choice' => 'Multiple choice', 'true-false' => 'True / false', 'fill-blank' => 'Fill in the blank', 'short-answer' => 'Short answer'] as $value => $label)
+                                        <label class="flex items-center gap-2 text-sm">
+                                            <input type="checkbox" name="question_types[]" value="{{ $value }}"
+                                                   @checked(in_array($value, (array) $configuredTypes, true))>
+                                            {{ $label }}
+                                        </label>
+                                    @endforeach
+                                </div>
+                            </x-ui.field>
+
+                            <div class="flex justify-end gap-2 border-t border-line pt-4">
+                                <button type="button" class="btn btn-ghost btn-sm" @click="open = false">Cancel</button>
+                                <button type="submit" class="btn btn-primary btn-sm">
+                                    {{ $hasContent ? 'Regenerate' : 'Generate' }}
+                                </button>
                             </div>
                         </form>
                     </div>
