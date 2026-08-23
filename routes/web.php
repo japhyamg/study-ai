@@ -11,7 +11,6 @@ use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\StudentController;
 use App\Http\Controllers\SuperAdmin\ImpersonationController;
 use App\Http\Controllers\TeacherController;
-use App\Http\Controllers\TopicController;
 use App\Http\Controllers\TwoFactorController;
 use App\Models\SchoolMember;
 use Illuminate\Support\Facades\Auth;
@@ -226,22 +225,16 @@ Route::middleware(['auth', 'school.user', '2fa', 'role:teacher,admin'])
 Route::middleware(['auth', 'school.user', '2fa', 'role:student,admin'])
     ->prefix('student')->name('student.')->group(function () {
         Route::get('dashboard', [StudentController::class, 'dashboard'])->name('dashboard');
-        Route::get('classes', [StudentController::class, 'classes'])->name('classes');
-        Route::get('classes/{enrollment}', [StudentController::class, 'classShow'])->name('classes.show');
-        Route::get('materials', [StudentController::class, 'materials'])->name('materials');
+        // Students work by subject, not by class arm: the arm is how the school
+        // groups them, the subject is what they actually study.
+        Route::get('subjects', [StudentController::class, 'subjects'])->name('subjects');
+        Route::get('subjects/{subject}', [StudentController::class, 'subjectShow'])->name('subjects.show');
 
         Route::get('exams', [StudentController::class, 'exams'])->name('exams');
         Route::post('exams/{exam}/start', [StudentController::class, 'startExam'])->name('exams.start');
         Route::get('exams/{exam}/take/{attempt}', [StudentController::class, 'takeExam'])->name('exams.take');
         Route::post('exams/{exam}/attempt/{attempt}', [StudentController::class, 'submitExam'])->name('exams.submit');
         Route::get('exams/{exam}/result/{attempt}', [StudentController::class, 'examResult'])->name('exams.result');
-
-        Route::get('flashcards', [StudentController::class, 'flashcards'])->name('flashcards');
-        Route::post('flashcards/{flashcard}/review', [StudentController::class, 'reviewFlashcard'])->name('flashcards.review');
-
-        Route::get('topics', [TopicController::class, 'index'])->name('topics.index');
-        Route::post('topics/generate', [TopicController::class, 'generate'])->name('topics.generate');
-        Route::delete('topics/{topic}', [TopicController::class, 'destroy'])->name('topics.destroy');
 
         Route::get('study', [StudentController::class, 'studyIndex'])->name('study.index');
         Route::get('study/session', [StudentController::class, 'studySession'])->name('study.session');

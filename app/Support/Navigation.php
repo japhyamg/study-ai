@@ -105,14 +105,11 @@ final class Navigation
         return [
             'Learn' => [
                 self::link('Dashboard', 'student.dashboard', 'home'),
-                self::link('My classes', 'student.classes', 'users', 'student.classes*'),
-                self::link('Materials', 'student.materials', 'document', 'student.materials*'),
+                self::link('Subjects', 'student.subjects', 'book', 'student.subjects*'),
             ],
             'Practice' => [
                 self::link('Study', 'student.study.index', 'sparkles', 'student.study*'),
-                self::link('Flashcards', 'student.flashcards', 'layers'),
                 self::link('Exams', 'student.exams', 'clipboard', 'student.exams*'),
-                self::link('Topics', 'student.topics.index', 'book', 'student.topics.*'),
             ],
         ];
     }
