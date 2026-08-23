@@ -2,14 +2,11 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\ClassEnrollment;
-use App\Models\ClassModel;
+use App\Models\ClassArm;
 use App\Models\ExamAttempt;
-use App\Models\InviteCode;
 use App\Models\School;
 use App\Models\SchoolMember;
 use App\Models\Subject;
-use App\Models\Term;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -36,7 +33,7 @@ class AdminController extends Controller
         $schoolId = $school?->id;
 
         $stats = [
-            'classes' => ClassModel::where('school_id', $schoolId)->count(),
+            'classes' => ClassArm::where('school_id', $schoolId)->count(),
             'students' => SchoolMember::where('school_id', $schoolId)->where('role', SchoolMember::ROLE_STUDENT)->count(),
             'exams' => \App\Models\Exam::where('school_id', $schoolId)->count(),
             'avgScore' => round((float) \App\Models\ExamAttempt::whereHas('exam', fn ($q) => $q->where('school_id', $schoolId))
@@ -98,14 +95,14 @@ class AdminController extends Controller
         $maxBucket = max(1, ...$buckets);
 
         // Per-class performance
-        $classStats = ClassModel::where('school_id', $schoolId)
+        $classStats = ClassArm::with('classLevel')->where('school_id', $schoolId)
             ->withCount('enrollments')
             ->with(['exams' => fn ($q) => $q->withCount('attempts')])
             ->get()
             ->map(function ($c) {
-                $attempts = ExamAttempt::whereHas('exam', fn ($q) => $q->where('class_id', $c->id))->get();
+                $attempts = ExamAttempt::whereHas('exam', fn ($q) => $q->where('class_arm_id', $c->id))->get();
                 return [
-                    'name' => $c->name,
+                    'name' => $c->fullName(),
                     'students' => $c->enrollments_count,
                     'exams' => $c->exams->count(),
                     'attempts' => $attempts->count(),
@@ -119,142 +116,6 @@ class AdminController extends Controller
         return view('admin.analytics', compact(
             'totalAttempts', 'avgScore', 'passRate', 'buckets', 'maxBucket', 'classStats', 'tokenUsage'
         ));
-    }
-
-    // ── Classes ──
-    public function classes(Request $request): View
-    {
-        $school = $this->school();
-        $classes = ClassModel::with(['subject', 'teacher', 'term'])
-            ->where('school_id', $school?->id)
-            ->orderBy('name')
-            ->paginate(20);
-
-        return view('admin.classes.index', compact('classes'));
-    }
-
-    public function createClass(): View
-    {
-        $school = $this->school();
-        $subjects = Subject::where('school_id', $school?->id)->orderBy('name')->get();
-        $terms = Term::where('school_id', $school?->id)->orderBy('name')->get();
-        $teachers = SchoolMember::with('user')
-            ->where('school_id', $school?->id)
-            ->where('role', SchoolMember::ROLE_TEACHER)
-            ->get();
-        return view('admin.classes.create', compact('subjects', 'terms', 'teachers'));
-    }
-
-    public function storeClass(Request $request): RedirectResponse
-    {
-        $school = $this->school();
-        $data = $request->validate([
-            'name' => 'required|string|max:255',
-            'description' => 'nullable|string',
-            'subject_id' => 'nullable|exists:subjects,id',
-            'term_id' => 'nullable|exists:terms,id',
-            'teacher_id' => 'nullable|exists:users,id',
-        ]);
-
-        $data['school_id'] = $school?->id;
-        ClassModel::create($data);
-
-        return redirect()->route('admin.classes.index')->with('status', 'Class created.');
-    }
-
-    public function showClass(ClassModel $class): View
-    {
-        $this->authorize('view', $class);
-        $class->load(['subject', 'teacher', 'term', 'enrollments.user', 'materials', 'exams']);
-        return view('admin.classes.show', compact('class'));
-    }
-
-    public function editClass(ClassModel $class): View
-    {
-        $this->authorize('update', $class);
-        $school = $this->school();
-        $subjects = Subject::where('school_id', $school?->id)->orderBy('name')->get();
-        $terms = Term::where('school_id', $school?->id)->orderBy('name')->get();
-        $teachers = SchoolMember::with('user')
-            ->where('school_id', $school?->id)
-            ->where('role', SchoolMember::ROLE_TEACHER)
-            ->get();
-        return view('admin.classes.edit', compact('class', 'subjects', 'terms', 'teachers'));
-    }
-
-    public function updateClass(Request $request, ClassModel $class): RedirectResponse
-    {
-        $this->authorize('update', $class);
-        $data = $request->validate([
-            'name' => 'required|string|max:255',
-            'description' => 'nullable|string',
-            'subject_id' => 'nullable|exists:subjects,id',
-            'term_id' => 'nullable|exists:terms,id',
-            'teacher_id' => 'nullable|exists:users,id',
-        ]);
-        $class->update($data);
-        return redirect()->route('admin.classes.show', $class)->with('status', 'Class updated.');
-    }
-
-    public function destroyClass(ClassModel $class): RedirectResponse
-    {
-        $this->authorize('delete', $class);
-        $class->delete();
-        return redirect()->route('admin.classes.index')->with('status', 'Class deleted.');
-    }
-
-    public function assignTeacher(Request $request, ClassModel $class): RedirectResponse
-    {
-        $this->authorize('update', $class);
-        $data = $request->validate([
-            'teacher_id' => ['required', 'exists:users,id'],
-        ]);
-        $class->update(['teacher_id' => $data['teacher_id']]);
-        return back()->with('status', 'Teacher assigned.');
-    }
-
-    public function enrollStudent(Request $request, ClassModel $class): RedirectResponse
-    {
-        $this->authorize('update', $class);
-        $data = $request->validate([
-            'user_id' => ['required', 'exists:users,id'],
-        ]);
-        ClassEnrollment::updateOrCreate(
-            ['class_id' => $class->id, 'user_id' => $data['user_id']],
-            ['role' => SchoolMember::ROLE_STUDENT, 'enrolled_at' => now()]
-        );
-        return back()->with('status', 'Student enrolled.');
-    }
-
-    public function unenrollStudent(ClassModel $class, string $userId): RedirectResponse
-    {
-        $this->authorize('update', $class);
-        ClassEnrollment::where('class_id', $class->id)->where('user_id', $userId)->delete();
-        return back()->with('status', 'Student unenrolled.');
-    }
-
-    public function inviteCodes(ClassModel $class): View
-    {
-        $this->authorize('view', $class);
-        $codes = InviteCode::where('class_id', $class->id)->orderBy('created_at', 'desc')->get();
-        return view('admin.classes.invite-codes', compact('class', 'codes'));
-    }
-
-    public function storeInviteCode(Request $request, ClassModel $class): RedirectResponse
-    {
-        $this->authorize('update', $class);
-        $data = $request->validate([
-            'max_uses' => 'nullable|integer|min:1',
-            'expires_at' => 'nullable|date',
-        ]);
-        InviteCode::create([
-            'school_id' => $class->school_id,
-            'class_id' => $class->id,
-            'code' => strtoupper(substr(md5(uniqid((string) mt_rand(), true)), 0, 8)),
-            'max_uses' => $data['max_uses'] ?? null,
-            'expires_at' => $data['expires_at'] ?? null,
-        ]);
-        return back()->with('status', 'Invite code generated.');
     }
 
     // ── Members ──
@@ -376,7 +237,9 @@ class AdminController extends Controller
     {
         $school = $this->school();
         $subjects = Subject::where('school_id', $school?->id)->orderBy('name')->paginate(30);
-        return view('admin.subjects.index', compact('subjects'));
+        $levels = \App\Models\ClassLevel::where('school_id', $school?->id)->orderBy('position')->get();
+
+        return view('admin.subjects.index', compact('subjects', 'levels'));
     }
 
     public function storeSubject(Request $request): RedirectResponse
@@ -385,6 +248,10 @@ class AdminController extends Controller
         $data = $request->validate([
             'name' => 'required|string|max:255',
             'code' => 'nullable|string|max:50',
+            'category' => 'nullable|in:core,elective,vocational',
+            'applies_to' => 'nullable|array',
+            'applies_to.*' => 'string|max:20',
+            'description' => 'nullable|string|max:500',
         ]);
         Subject::create([
             'school_id' => $school?->id,
@@ -403,7 +270,13 @@ class AdminController extends Controller
         $data = $request->validate([
             'name' => 'required|string|max:255',
             'code' => 'nullable|string|max:50',
+            'category' => 'nullable|in:core,elective,vocational',
+            'applies_to' => 'nullable|array',
+            'applies_to.*' => 'string|max:20',
+            'description' => 'nullable|string|max:500',
+            'is_active' => 'nullable|boolean',
         ]);
+        $data['is_active'] = $request->boolean('is_active');
         $subject->update($data);
         return back()->with('status', 'Subject updated.');
     }
@@ -418,66 +291,4 @@ class AdminController extends Controller
         return back()->with('status', 'Subject removed.');
     }
 
-    public function terms(): View
-    {
-        $school = $this->school();
-        $terms = Term::where('school_id', $school?->id)->orderBy('name')->paginate(30);
-        return view('admin.terms.index', compact('terms'));
-    }
-
-    public function storeTerm(Request $request): RedirectResponse
-    {
-        $school = $this->school();
-        $data = $request->validate([
-            'name' => 'required|string|max:255',
-            'start_date' => 'nullable|date',
-            'end_date' => 'nullable|date|after_or_equal:start_date',
-            'active' => 'nullable|boolean',
-        ]);
-        if (!empty($data['active'])) {
-            Term::where('school_id', $school?->id)->update(['active' => false]);
-        }
-        Term::create([
-            'school_id' => $school?->id,
-            'name' => $data['name'],
-            'start_date' => $data['start_date'] ?? null,
-            'end_date' => $data['end_date'] ?? null,
-            'active' => !empty($data['active']),
-        ]);
-        return back()->with('status', 'Term added.');
-    }
-
-    public function updateTerm(Request $request, Term $term): RedirectResponse
-    {
-        $school = $this->school();
-        if ($term->school_id !== $school?->id) {
-            abort(403);
-        }
-        $data = $request->validate([
-            'name' => 'required|string|max:255',
-            'start_date' => 'nullable|date',
-            'end_date' => 'nullable|date|after_or_equal:start_date',
-            'active' => 'nullable|boolean',
-        ]);
-        if (!empty($data['active'])) {
-            Term::where('school_id', $school?->id)->where('id', '!=', $term->id)->update(['active' => false]);
-        }
-        $term->update([
-            'name' => $data['name'],
-            'start_date' => $data['start_date'] ?? null,
-            'end_date' => $data['end_date'] ?? null,
-            'active' => !empty($data['active']),
-        ]);
-        return back()->with('status', 'Term updated.');
-    }
-
-    public function destroyTerm(Term $term): RedirectResponse
-    {
-        $school = $this->school();
-        if ($term->school_id !== $school?->id) {
-            abort(403);
-        }
-        $term->delete();
-        return back()->with('status', 'Term removed.');
-    }
 }

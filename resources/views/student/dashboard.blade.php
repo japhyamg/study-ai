@@ -59,7 +59,7 @@
                 <li class="py-2.5 flex items-center justify-between gap-3">
                     <div>
                         <div class="font-medium">{{ $e->title }}</div>
-                        <div class="text-xs text-faint">{{ $e->classRoom?->name ?? 'General' }} · {{ $e->questions_count }} questions</div>
+                        <div class="text-xs text-faint">{{ $e->classArm?->fullName() ?? 'General' }} · {{ $e->questions_count }} questions</div>
                     </div>
                     <form method="POST" action="{{ route('student.exams.start', $e) }}">@csrf<button class="px-3 py-1 btn btn-primary text-xs">Start</button></form>
                 </li>
@@ -92,8 +92,8 @@
             <div class="grid gap-3 p-5 md:grid-cols-2">
                 @foreach($enrollments as $en)
                     <a href="{{ route('student.classes.show', $en) }}" class="p-4 border border-line block hover:border-accent transition-colors" style="border-radius:3px">
-                        <h3 class="font-medium text-ink">{{ $en->class?->name ?? 'Class' }}</h3>
-                        @if($en->class?->subject)<p class="text-sm text-muted">{{ $en->class->subject->name }}</p>@endif
+                        <h3 class="font-medium text-ink">{{ $en->classArm?->fullName() ?? 'Class' }}</h3>
+                        @if($en->classArm?->stream)<p class="text-sm text-muted">{{ $en->classArm->stream }}</p>@endif
                     </a>
                 @endforeach
             </div>

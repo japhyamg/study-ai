@@ -15,11 +15,11 @@ class InviteCode extends Model
     public $incrementing = false;
 
     protected $fillable = [
-        'school_id', 'code', 'class_id', 'max_uses', 'used_count', 'expires_at',
+        'school_id', 'code', 'class_arm_id', 'max_uses', 'used_count', 'expires_at',
     ];
 
     protected $casts = ['expires_at' => 'datetime'];
 
     public function school(): BelongsTo { return $this->belongsTo(School::class); }
-    public function class(): BelongsTo { return $this->belongsTo(ClassModel::class, 'class_id'); }
+    public function classArm(): BelongsTo { return $this->belongsTo(ClassArm::class, 'class_arm_id'); }
 }

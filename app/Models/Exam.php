@@ -16,7 +16,7 @@ class Exam extends Model
     public $incrementing = false;
 
     protected $fillable = [
-        'school_id', 'class_id', 'subject_id', 'title', 'description',
+        'school_id', 'class_arm_id', 'subject_id', 'title', 'description',
         'status', 'duration', 'pass_mark', 'shuffle_questions', 'shuffle_options',
         'negative_marking', 'max_attempts', 'start_time', 'end_time',
         'show_results', 'published_at', 'created_by',
@@ -40,8 +40,7 @@ class Exam extends Model
     const STATUS_ARCHIVED = 'archived';
 
     public function school(): BelongsTo { return $this->belongsTo(School::class); }
-    public function class(): BelongsTo { return $this->belongsTo(ClassModel::class, 'class_id'); }
-    public function classRoom(): BelongsTo { return $this->belongsTo(ClassModel::class, 'class_id'); }
+    public function classArm(): BelongsTo { return $this->belongsTo(ClassArm::class, 'class_arm_id'); }
     public function subject(): BelongsTo { return $this->belongsTo(Subject::class); }
     public function questions(): HasMany { return $this->hasMany(ExamQuestion::class); }
     public function attempts(): HasMany { return $this->hasMany(ExamAttempt::class); }

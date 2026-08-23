@@ -1,5 +1,7 @@
 <?php
 
+use App\Http\Controllers\Admin\AcademicController;
+use App\Http\Controllers\Admin\ClassArmController;
 use App\Http\Controllers\AdminController;
 use App\Http\Controllers\MaterialController;
 use App\Http\Controllers\OnboardingController;
@@ -83,18 +85,47 @@ Route::middleware(['auth', 'school.user', '2fa', 'role:admin'])
         Route::get('dashboard', [AdminController::class, 'dashboard'])->name('dashboard');
         Route::get('analytics', [AdminController::class, 'analytics'])->name('analytics');
 
-        Route::get('classes', [AdminController::class, 'classes'])->name('classes.index');
-        Route::get('classes/new', [AdminController::class, 'createClass'])->name('classes.create');
-        Route::post('classes', [AdminController::class, 'storeClass'])->name('classes.store');
-        Route::get('classes/{class}', [AdminController::class, 'showClass'])->name('classes.show');
-        Route::get('classes/{class}/edit', [AdminController::class, 'editClass'])->name('classes.edit');
-        Route::put('classes/{class}', [AdminController::class, 'updateClass'])->name('classes.update');
-        Route::delete('classes/{class}', [AdminController::class, 'destroyClass'])->name('classes.destroy');
-        Route::put('classes/{class}/assign-teacher', [AdminController::class, 'assignTeacher'])->name('classes.assign-teacher');
-        Route::post('classes/{class}/enroll', [AdminController::class, 'enrollStudent'])->name('classes.enroll');
-        Route::delete('classes/{class}/enroll/{userId}', [AdminController::class, 'unenrollStudent'])->name('classes.unenroll');
-        Route::get('classes/{class}/invite-codes', [AdminController::class, 'inviteCodes'])->name('classes.invite-codes');
-        Route::post('classes/{class}/invite-codes', [AdminController::class, 'storeInviteCode'])->name('classes.invite-codes.store');
+        // ── Academic calendar & structure ──
+        Route::get('academic', [AcademicController::class, 'index'])->name('academic.index');
+        Route::post('academic/bootstrap', [AcademicController::class, 'bootstrap'])->name('academic.bootstrap');
+
+        Route::post('sessions', [AcademicController::class, 'storeSession'])->name('sessions.store');
+        Route::put('sessions/{session}', [AcademicController::class, 'updateSession'])->name('sessions.update');
+        Route::put('sessions/{session}/activate', [AcademicController::class, 'activateSession'])->name('sessions.activate');
+        Route::delete('sessions/{session}', [AcademicController::class, 'destroySession'])->name('sessions.destroy');
+
+        Route::get('terms', [AcademicController::class, 'terms'])->name('terms.index');
+        Route::post('terms', [AcademicController::class, 'storeTerm'])->name('terms.store');
+        Route::put('terms/{term}', [AcademicController::class, 'updateTerm'])->name('terms.update');
+        Route::put('terms/{term}/activate', [AcademicController::class, 'activateTerm'])->name('terms.activate');
+        Route::delete('terms/{term}', [AcademicController::class, 'destroyTerm'])->name('terms.destroy');
+
+        Route::get('levels', [AcademicController::class, 'levels'])->name('levels.index');
+        Route::post('levels', [AcademicController::class, 'storeLevel'])->name('levels.store');
+        Route::put('levels/{level}', [AcademicController::class, 'updateLevel'])->name('levels.update');
+        Route::delete('levels/{level}', [AcademicController::class, 'destroyLevel'])->name('levels.destroy');
+
+        Route::get('assessment-types', [AcademicController::class, 'assessmentTypes'])->name('assessment-types.index');
+        Route::post('assessment-types', [AcademicController::class, 'storeAssessmentType'])->name('assessment-types.store');
+        Route::put('assessment-types/{assessmentType}', [AcademicController::class, 'updateAssessmentType'])->name('assessment-types.update');
+        Route::delete('assessment-types/{assessmentType}', [AcademicController::class, 'destroyAssessmentType'])->name('assessment-types.destroy');
+
+        // ── Classes (arms) ──
+        Route::get('classes', [ClassArmController::class, 'index'])->name('classes.index');
+        Route::get('classes/new', [ClassArmController::class, 'create'])->name('classes.create');
+        Route::post('classes', [ClassArmController::class, 'store'])->name('classes.store');
+        Route::get('classes/{class}', [ClassArmController::class, 'show'])->name('classes.show');
+        Route::get('classes/{class}/edit', [ClassArmController::class, 'edit'])->name('classes.edit');
+        Route::put('classes/{class}', [ClassArmController::class, 'update'])->name('classes.update');
+        Route::delete('classes/{class}', [ClassArmController::class, 'destroy'])->name('classes.destroy');
+
+        Route::post('classes/{class}/enroll', [ClassArmController::class, 'enroll'])->name('classes.enroll');
+        Route::delete('classes/{class}/enroll/{userId}', [ClassArmController::class, 'unenroll'])->name('classes.unenroll');
+        Route::post('classes/{class}/subjects', [ClassArmController::class, 'assignSubject'])->name('classes.subjects.assign');
+        Route::delete('classes/{class}/subjects', [ClassArmController::class, 'unassignSubject'])->name('classes.subjects.unassign');
+        Route::post('classes/{class}/promote', [ClassArmController::class, 'promote'])->name('classes.promote');
+        Route::get('classes/{class}/invite-codes', [ClassArmController::class, 'inviteCodes'])->name('classes.invite-codes');
+        Route::post('classes/{class}/invite-codes', [ClassArmController::class, 'storeInviteCode'])->name('classes.invite-codes.store');
 
         // People — one screen per user type, backed by separate profile tables
         Route::get('members', [AdminController::class, 'members'])->name('members');
@@ -116,10 +147,6 @@ Route::middleware(['auth', 'school.user', '2fa', 'role:admin'])
         Route::put('subjects/{subject}', [AdminController::class, 'updateSubject'])->name('subjects.update');
         Route::delete('subjects/{subject}', [AdminController::class, 'destroySubject'])->name('subjects.destroy');
 
-        Route::get('terms', [AdminController::class, 'terms'])->name('terms.index');
-        Route::post('terms', [AdminController::class, 'storeTerm'])->name('terms.store');
-        Route::put('terms/{term}', [AdminController::class, 'updateTerm'])->name('terms.update');
-        Route::delete('terms/{term}', [AdminController::class, 'destroyTerm'])->name('terms.destroy');
     });
 
 /*

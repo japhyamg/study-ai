@@ -12,12 +12,23 @@ class ClassEnrollment extends Model
     use HasFactory, HasUuids;
 
     protected $keyType = 'string';
+
     public $incrementing = false;
 
-    protected $fillable = ['class_id', 'user_id', 'role', 'enrolled_at'];
+    protected $fillable = ['class_arm_id', 'user_id', 'role', 'enrolled_at'];
 
-    protected $casts = ['enrolled_at' => 'datetime'];
+    protected function casts(): array
+    {
+        return ['enrolled_at' => 'datetime'];
+    }
 
-    public function class(): BelongsTo { return $this->belongsTo(ClassModel::class, 'class_id'); }
-    public function user(): BelongsTo { return $this->belongsTo(User::class); }
+    public function classArm(): BelongsTo
+    {
+        return $this->belongsTo(ClassArm::class, 'class_arm_id');
+    }
+
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
+    }
 }

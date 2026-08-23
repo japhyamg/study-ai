@@ -69,9 +69,12 @@ final class Navigation
                 self::link('Administrators', 'admin.administrators', 'shield'),
             ],
             'Academics' => [
+                self::link('Overview', 'admin.academic.index', 'academic-cap', 'admin.academic.*'),
                 self::link('Classes', 'admin.classes.index', 'users', 'admin.classes.*'),
+                self::link('Class levels', 'admin.levels.index', 'layers', 'admin.levels.*'),
                 self::link('Subjects', 'admin.subjects.index', 'book', 'admin.subjects.*'),
-                self::link('Terms', 'admin.terms.index', 'calendar', 'admin.terms.*'),
+                self::link('Sessions & terms', 'admin.terms.index', 'calendar', 'admin.terms.*'),
+                self::link('Assessments', 'admin.assessment-types.index', 'clipboard', 'admin.assessment-types.*'),
             ],
             'Manage' => [
                 self::link('Settings', 'admin.settings', 'cog', 'admin.settings*'),

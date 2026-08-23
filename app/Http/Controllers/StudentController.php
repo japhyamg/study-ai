@@ -31,16 +31,16 @@ class StudentController extends Controller
         $user = auth()->user();
         $school = $this->school();
 
-        $enrollments = ClassEnrollment::with('class.subject')
+        $enrollments = ClassEnrollment::with('classArm.classLevel')
             ->where('user_id', $user->id)
             ->get();
-        $classIds = $enrollments->pluck('class_id')->filter();
+        $classIds = $enrollments->pluck('class_arm_id')->filter();
 
         $availableExams = Exam::where('school_id', $school?->id)
             ->where('status', Exam::STATUS_PUBLISHED)
-            ->whereIn('class_id', $classIds->isEmpty() ? [null] : $classIds)
+            ->whereIn('class_arm_id', $classIds->isEmpty() ? [null] : $classIds)
             ->orWhere(function ($q) use ($school) {
-                $q->where('school_id', $school?->id)->where('status', Exam::STATUS_PUBLISHED)->whereNull('class_id');
+                $q->where('school_id', $school?->id)->where('status', Exam::STATUS_PUBLISHED)->whereNull('class_arm_id');
             })
             ->withCount('questions')
             ->orderBy('created_at', 'desc')
@@ -57,9 +57,9 @@ class StudentController extends Controller
         $publishedMaterials = Material::with(['subject'])
             ->where('school_id', $school?->id)
             ->where('published', true)
-            ->whereIn('class_id', $classIds->isEmpty() ? [null] : $classIds)
+            ->whereIn('class_arm_id', $classIds->isEmpty() ? [null] : $classIds)
             ->orWhere(function ($q) use ($school) {
-                $q->where('school_id', $school?->id)->where('published', true)->whereNull('class_id');
+                $q->where('school_id', $school?->id)->where('published', true)->whereNull('class_arm_id');
             })
             ->withCount(['flashcards', 'questions'])
             ->orderBy('published_at', 'desc')
@@ -113,7 +113,9 @@ class StudentController extends Controller
     public function classes(): View
     {
         $user = auth()->user();
-        $enrollments = ClassEnrollment::with(['class' => fn ($q) => $q->withCount('enrollments')])
+        $enrollments = ClassEnrollment::with([
+                'classArm' => fn ($q) => $q->with('classLevel')->withCount(['enrollments', 'materials']),
+            ])
             ->where('user_id', $user->id)
             ->get();
         return view('student.classes', compact('enrollments'));
@@ -122,7 +124,10 @@ class StudentController extends Controller
     public function classShow(ClassEnrollment $enrollment): View
     {
         abort_unless($enrollment->user_id === auth()->id(), 403);
-        $enrollment->load(['class.materials' => fn ($q) => $q->where('published', true)]);
+        $enrollment->load([
+            'classArm.classLevel',
+            'classArm.materials' => fn ($q) => $q->where('published', true),
+        ]);
         return view('student.class-show', compact('enrollment'));
     }
 
@@ -130,12 +135,12 @@ class StudentController extends Controller
     {
         $user = auth()->user();
         $school = $this->school();
-        $classIds = ClassEnrollment::where('user_id', $user->id)->pluck('class_id')->filter();
-        $materials = Material::with('classRoom')
+        $classIds = ClassEnrollment::where('user_id', $user->id)->pluck('class_arm_id')->filter();
+        $materials = Material::with('classArm')
             ->where('published', true)
-            ->whereIn('class_id', $classIds->isEmpty() ? [null] : $classIds)
+            ->whereIn('class_arm_id', $classIds->isEmpty() ? [null] : $classIds)
             ->orWhere(function ($q) use ($school) {
-                $q->where('school_id', $school?->id)->where('published', true)->whereNull('class_id');
+                $q->where('school_id', $school?->id)->where('published', true)->whereNull('class_arm_id');
             })
             ->orderBy('created_at', 'desc')
             ->paginate(15);
@@ -147,13 +152,13 @@ class StudentController extends Controller
     {
         $user = auth()->user();
         $school = $this->school();
-        $classIds = ClassEnrollment::where('user_id', $user->id)->pluck('class_id')->filter();
+        $classIds = ClassEnrollment::where('user_id', $user->id)->pluck('class_arm_id')->filter();
 
         $exams = Exam::where('school_id', $school?->id)
             ->where('status', Exam::STATUS_PUBLISHED)
-            ->whereIn('class_id', $classIds->isEmpty() ? [null] : $classIds)
+            ->whereIn('class_arm_id', $classIds->isEmpty() ? [null] : $classIds)
             ->orWhere(function ($q) use ($school) {
-                $q->where('school_id', $school?->id)->where('status', Exam::STATUS_PUBLISHED)->whereNull('class_id');
+                $q->where('school_id', $school?->id)->where('status', Exam::STATUS_PUBLISHED)->whereNull('class_arm_id');
             })
             ->withCount('questions')
             ->orderBy('created_at', 'desc')

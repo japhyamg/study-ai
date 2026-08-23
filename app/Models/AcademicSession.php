@@ -7,12 +7,13 @@ use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
- * A term within an {@see AcademicSession}. `sequence` gives an explicit order
- * (1st, 2nd, 3rd…) so terms sort correctly regardless of naming.
+ * An academic year, e.g. "2024/2025". Terms hang off a session, so history is
+ * preserved year on year rather than terms floating free.
  */
-class Term extends Model
+class AcademicSession extends Model
 {
     use HasFactory, HasUuids;
 
@@ -21,8 +22,7 @@ class Term extends Model
     public $incrementing = false;
 
     protected $fillable = [
-        'school_id', 'academic_session_id', 'name', 'sequence',
-        'is_current', 'start_date', 'end_date', 'resumption_date',
+        'school_id', 'name', 'start_date', 'end_date', 'is_current',
     ];
 
     protected function casts(): array
@@ -30,9 +30,7 @@ class Term extends Model
         return [
             'start_date' => 'date',
             'end_date' => 'date',
-            'resumption_date' => 'date',
             'is_current' => 'boolean',
-            'sequence' => 'integer',
         ];
     }
 
@@ -41,9 +39,14 @@ class Term extends Model
         return $this->belongsTo(School::class);
     }
 
-    public function academicSession(): BelongsTo
+    public function terms(): HasMany
     {
-        return $this->belongsTo(AcademicSession::class);
+        return $this->hasMany(Term::class)->orderBy('sequence');
+    }
+
+    public function classArms(): HasMany
+    {
+        return $this->hasMany(ClassArm::class);
     }
 
     public function scopeCurrent(Builder $query): Builder
@@ -51,7 +54,7 @@ class Term extends Model
         return $query->where('is_current', true);
     }
 
-    /** Make this the school's current term; unsets any other. */
+    /** Make this the school's current session; unsets any other. */
     public function makeCurrent(): void
     {
         static::where('school_id', $this->school_id)
@@ -60,13 +63,7 @@ class Term extends Model
 
         $this->forceFill(['is_current' => true])->save();
 
-        School::whereKey($this->school_id)->update(['current_term_id' => $this->id]);
-    }
-
-    /** "First Term · 2024/2025" */
-    public function displayName(): string
-    {
-        return $this->name.($this->academicSession ? ' · '.$this->academicSession->name : '');
+        School::whereKey($this->school_id)->update(['current_session_id' => $this->id]);
     }
 
     public function isActive(): bool

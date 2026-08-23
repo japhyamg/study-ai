@@ -11,9 +11,9 @@
         <div class="grid grid-cols-2 gap-4">
             <div>
                 <label class="text-sm font-medium">Class (optional)</label>
-                <select name="class_id" class="w-full border rounded px-2 py-1 text-sm">
+                <select name="class_arm_id" class="w-full border rounded px-2 py-1 text-sm">
                     <option value="">No class</option>
-                    @foreach($classes as $c)<option value="{{ $c->id }}">{{ $c->name }}</option>@endforeach
+                    @foreach($classes as $c)<option value="{{ $c->id }}">{{ $c->fullName() }}</option>@endforeach
                 </select>
             </div>
             <div>

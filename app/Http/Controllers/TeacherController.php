@@ -2,7 +2,7 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\ClassModel;
+use App\Models\ClassArm;
 use App\Models\Exam;
 use App\Models\ExamAttempt;
 use App\Models\ExamQuestion;
@@ -37,14 +37,15 @@ class TeacherController extends Controller
     {
         $user = auth()->user();
         $school = $this->school();
-        $myClasses = ClassModel::where('school_id', $school?->id)
-            ->where(function ($q) use ($user) {
-                $q->where('teacher_id', $user->id)
-                  ->orWhereNotNull('teacher_id');
-            })
+        $myClasses = ClassArm::where('school_id', $school?->id)
+            ->where(fn ($q) => $q
+                ->where('form_teacher_id', $user->id)
+                ->orWhereHas('subjectAssignments', fn ($a) => $a->where('teacher_id', $user->id)))
+            ->with('classLevel')
             ->withCount('enrollments')
-            ->orderBy('name')
-            ->get();
+            ->get()
+            ->sortBy(fn ($a) => [$a->classLevel?->position ?? 0, $a->name])
+            ->values();
 
         $myExams = Exam::where('school_id', $school?->id)
             ->where('created_by', $user->id)
@@ -55,7 +56,7 @@ class TeacherController extends Controller
 
         $pendingMaterials = Material::where('school_id', $school?->id)
             ->where('review_status', Material::REVIEW_PENDING)
-            ->with('classRoom')
+            ->with('classArm')
             ->get();
 
         return view('teacher.dashboard', compact('myClasses', 'myExams', 'pendingMaterials'));
@@ -66,19 +67,26 @@ class TeacherController extends Controller
     {
         $user = auth()->user();
         $school = $this->school();
-        $classes = ClassModel::where('school_id', $school?->id)
-            ->where('teacher_id', $user->id)
-            ->with(['subject', 'term'])
+        $classes = ClassArm::where('school_id', $school?->id)
+            ->where(fn ($q) => $q
+                ->where('form_teacher_id', $user->id)
+                ->orWhereHas('subjectAssignments', fn ($a) => $a->where('teacher_id', $user->id)))
+            ->with(['classLevel', 'subjectAssignments.subject'])
             ->withCount('enrollments')
             ->orderBy('name')
             ->paginate(20);
+
         return view('teacher.classes.index', compact('classes'));
     }
 
-    public function teacherClassShow(ClassModel $class): View
+    public function teacherClassShow(ClassArm $class): View
     {
         $this->authorize('view', $class);
-        $class->load(['subject', 'term', 'enrollments.user', 'materials', 'exams' => fn ($q) => $q->withCount('attempts')]);
+        $class->load([
+            'classLevel', 'formTeacher', 'subjectAssignments.subject', 'subjectAssignments.teacher',
+            'enrollments.user', 'materials',
+            'exams' => fn ($q) => $q->withCount('attempts'),
+        ]);
         return view('teacher.classes.show', compact('class'));
     }
 
@@ -87,7 +95,7 @@ class TeacherController extends Controller
     {
         $user = auth()->user();
         $school = $this->school();
-        $query = Exam::with(['classRoom', 'questions'])
+        $query = Exam::with(['classArm', 'questions'])
             ->where('school_id', $school?->id)
             ->orderBy('created_at', 'desc');
 
@@ -104,7 +112,8 @@ class TeacherController extends Controller
     public function createExam(): View
     {
         $school = $this->school();
-        $classes = ClassModel::where('school_id', $school?->id)->orderBy('name')->get();
+        $classes = ClassArm::with('classLevel')->where('school_id', $school?->id)->get()
+            ->sortBy(fn ($a) => [$a->classLevel?->position ?? 0, $a->name])->values();
         return view('teacher.exams.create', compact('classes'));
     }
 
@@ -114,7 +123,7 @@ class TeacherController extends Controller
         $data = $request->validate([
             'title' => 'required|string|max:255',
             'description' => 'nullable|string',
-            'class_id' => 'nullable|exists:classes,id',
+            'class_arm_id' => 'nullable|exists:class_arms,id',
             'duration_minutes' => 'nullable|integer|min:1',
             'pass_mark' => 'nullable|numeric|min:0|max:100',
         ]);
@@ -132,9 +141,9 @@ class TeacherController extends Controller
     public function showExam(Exam $exam): View
     {
         $this->authorize('view', $exam);
-        $exam->load(['questions', 'classRoom']);
+        $exam->load(['questions', 'classArm']);
         $questionBank = QuestionBank::where('school_id', $this->school()?->id)
-            ->when($exam->class_id, fn ($q) => $q->where('subject_id', $exam->class?->subject_id))
+            ->when($exam->class_arm_id, fn ($q) => $q->where('subject_id', $exam->classArm?->subjectAssignments->first()?->subject_id))
             ->orderBy('created_at', 'desc')
             ->limit(50)
             ->get();
@@ -145,7 +154,8 @@ class TeacherController extends Controller
     {
         $this->authorize('update', $exam);
         $school = $this->school();
-        $classes = ClassModel::where('school_id', $school?->id)->orderBy('name')->get();
+        $classes = ClassArm::with('classLevel')->where('school_id', $school?->id)->get()
+            ->sortBy(fn ($a) => [$a->classLevel?->position ?? 0, $a->name])->values();
         return view('teacher.exams.edit', compact('exam', 'classes'));
     }
 
@@ -155,7 +165,7 @@ class TeacherController extends Controller
         $data = $request->validate([
             'title' => 'required|string|max:255',
             'description' => 'nullable|string',
-            'class_id' => 'nullable|exists:classes,id',
+            'class_arm_id' => 'nullable|exists:class_arms,id',
             'duration_minutes' => 'nullable|integer|min:1',
             'pass_mark' => 'nullable|numeric|min:0|max:100',
         ]);
@@ -228,7 +238,7 @@ class TeacherController extends Controller
     public function reviewMaterials(): View
     {
         $school = $this->school();
-        $materials = Material::with(['classRoom'])
+        $materials = Material::with(['classArm'])
             ->where('school_id', $school?->id)
             ->orderBy('review_status')
             ->orderBy('created_at', 'desc')
@@ -269,7 +279,7 @@ class TeacherController extends Controller
     public function materialsIndex(): View
     {
         $school = $this->school();
-        $materials = Material::with('classRoom')
+        $materials = Material::with('classArm')
             ->where('created_by', auth()->id())
             ->orWhere('school_id', $school?->id)
             ->orderBy('created_at', 'desc')
@@ -280,7 +290,8 @@ class TeacherController extends Controller
     public function materialsCreate(): View
     {
         $school = $this->school();
-        $classes = ClassModel::where('school_id', $school?->id)->orderBy('name')->get();
+        $classes = ClassArm::with('classLevel')->where('school_id', $school?->id)->get()
+            ->sortBy(fn ($a) => [$a->classLevel?->position ?? 0, $a->name])->values();
         $subjects = Subject::where('school_id', $school?->id)->orderBy('name')->get();
         return view('teacher.materials.create', compact('classes', 'subjects'));
     }
@@ -294,7 +305,7 @@ class TeacherController extends Controller
             'type' => 'required|in:note,pdf,pptx,youtube,video,doc,link,url',
             'content' => 'nullable|string',
             'source_url' => 'nullable|url',
-            'class_id' => 'nullable|exists:classes,id',
+            'class_arm_id' => 'nullable|exists:class_arms,id',
             'subject_id' => 'nullable|exists:subjects,id',
             // question settings (mirrors src/app/upload/page.tsx)
             'question_count' => 'nullable|integer|min:3|max:30',
@@ -305,7 +316,7 @@ class TeacherController extends Controller
 
         $material = Material::create([
             'school_id' => $school?->id,
-            'class_id' => $data['class_id'] ?? null,
+            'class_arm_id' => $data['class_arm_id'] ?? null,
             'subject_id' => $data['subject_id'] ?? null,
             'title' => $data['title'],
             'description' => $data['description'] ?? null,
@@ -350,7 +361,8 @@ class TeacherController extends Controller
     {
         $this->authorize('update', $material);
         $school = $this->school();
-        $classes = ClassModel::where('school_id', $school?->id)->orderBy('name')->get();
+        $classes = ClassArm::with('classLevel')->where('school_id', $school?->id)->get()
+            ->sortBy(fn ($a) => [$a->classLevel?->position ?? 0, $a->name])->values();
         $subjects = Subject::where('school_id', $school?->id)->orderBy('name')->get();
         return view('teacher.materials.edit', compact('material', 'classes', 'subjects'));
     }
@@ -363,7 +375,7 @@ class TeacherController extends Controller
             'description' => 'nullable|string',
             'content' => 'nullable|string',
             'source_url' => 'nullable|url',
-            'class_id' => 'nullable|exists:classes,id',
+            'class_arm_id' => 'nullable|exists:class_arms,id',
             'subject_id' => 'nullable|exists:subjects,id',
             'status' => 'nullable|in:draft,processing,ready,failed',
         ]);
@@ -374,7 +386,7 @@ class TeacherController extends Controller
     public function materialsShow(Material $material): View
     {
         $this->authorize('view', $material);
-        $material->load(['flashcards', 'questions', 'studyGuide', 'classRoom', 'subject']);
+        $material->load(['flashcards', 'questions', 'studyGuide', 'classArm', 'subject']);
         return view('teacher.materials.show', compact('material'));
     }
 

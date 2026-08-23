@@ -21,7 +21,7 @@
     <h2 class="font-display text-xl text-ink mb-1">{{ $material->title }}</h2>
     <div class="text-xs text-faint mb-4">
         {{ $material->type }} · Status: {{ $material->status }} · Review: {{ $material->review_status }}
-        · Class: {{ $material->classRoom?->name ?? '—' }} · Subject: {{ $material->subject?->name ?? '—' }}
+        · Class: {{ $material->classArm?->fullName() ?? '—' }} · Subject: {{ $material->subject?->name ?? '—' }}
     </div>
 
     @php($tab = request()->query('tab', 'overview'))

@@ -2,7 +2,7 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\ClassModel;
+use App\Models\ClassArm;
 use App\Models\School;
 use App\Models\SchoolMember;
 use Illuminate\Http\RedirectResponse;
@@ -65,9 +65,34 @@ class OnboardingController extends Controller
             'code' => 'required|string|max:32',
         ]);
 
-        $class = ClassModel::where('invite_code', $data['code'])->first();
+        $code = strtoupper(trim($data['code']));
+
+        // The code may be the arm's own code, or a generated InviteCode row.
+        $class = ClassArm::where('invite_code', $code)->first();
+
+        if (! $class) {
+            $invite = \App\Models\InviteCode::where('code', $code)->first();
+
+            if ($invite && $invite->class_arm_id) {
+                if ($invite->expires_at && $invite->expires_at->isPast()) {
+                    return back()->withErrors(['code' => 'That invite code has expired.']);
+                }
+
+                if ($invite->max_uses && $invite->used_count >= $invite->max_uses) {
+                    return back()->withErrors(['code' => 'That invite code has already been used the maximum number of times.']);
+                }
+
+                $class = $invite->classArm;
+                $invite->increment('used_count');
+            }
+        }
+
         if (! $class) {
             return back()->withErrors(['code' => 'No class found for that code.']);
+        }
+
+        if ($class->isFull()) {
+            return back()->withErrors(['code' => 'That class is already at capacity. Ask your school for help.']);
         }
 
         // Attach to the class's school as a student.
@@ -78,13 +103,13 @@ class OnboardingController extends Controller
             'role' => SchoolMember::ROLE_STUDENT,
         ]);
 
-        \App\Models\ClassEnrollment::firstOrCreate([
-            'class_id' => $class->id,
-            'user_id' => $user->id,
-        ]);
+        \App\Models\ClassEnrollment::firstOrCreate(
+            ['class_arm_id' => $class->id, 'user_id' => $user->id],
+            ['role' => 'student', 'enrolled_at' => now()]
+        );
 
         session(['active_school_id' => $class->school_id]);
 
-        return redirect()->route('student.dashboard')->with('status', "Joined \"{$class->name}\".");
+        return redirect()->route('student.dashboard')->with('status', 'Joined \''.$class->fullName().'\'.');
     }
 }

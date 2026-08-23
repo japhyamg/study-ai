@@ -1,29 +1,73 @@
-<x-layouts.studyai title="Classes">
-    <div class="surface">
-        <div class="px-5 py-3 border-b flex items-center justify-between">
-            <span class="font-semibold text-ink">Classes</span>
-            <a href="{{ route('admin.classes.create') }}" class="px-3 py-1 btn btn-primary text-sm">New Class</a>
+<x-layouts.studyai title="Classes" subtitle="Groups students belong to">
+    <x-slot:actions>
+        <a href="{{ route('admin.classes.create') }}" class="btn btn-primary btn-sm">
+            <x-icon name="plus" /> New class
+        </a>
+    </x-slot:actions>
+
+    <form method="GET" class="mb-4 flex flex-wrap items-end gap-2">
+        <x-ui.field label="Search" name="q" class="w-full sm:w-56">
+            <input name="q" class="input" placeholder="Class name" value="{{ request('q') }}">
+        </x-ui.field>
+        <x-ui.field label="Level" name="level" class="w-full sm:w-48">
+            <select name="level" class="select">
+                <option value="">All levels</option>
+                @foreach ($levels as $level)
+                    <option value="{{ $level->id }}" @selected(request('level') === $level->id)>{{ $level->name }}</option>
+                @endforeach
+            </select>
+        </x-ui.field>
+        <button class="btn btn-outline mb-0.5">Filter</button>
+        @if (request()->hasAny(['q', 'level']))
+            <a href="{{ route('admin.classes.index') }}" class="btn btn-ghost mb-0.5">Clear</a>
+        @endif
+    </form>
+
+    @if ($arms->isEmpty())
+        <x-ui.empty icon="users" title="No classes yet"
+                    message="Create a class so students have somewhere to belong.">
+            <x-slot:action>
+                <a href="{{ route('admin.classes.create') }}" class="btn btn-primary btn-sm">New class</a>
+            </x-slot:action>
+        </x-ui.empty>
+    @else
+        <div class="surface">
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Class</th><th>Stream</th><th>Form teacher</th>
+                            <th class="num">Students</th><th class="num">Subjects</th>
+                            <th>Invite code</th><th class="text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach ($arms as $arm)
+                            <tr>
+                                <td>
+                                    <a href="{{ route('admin.classes.show', $arm) }}" class="font-medium text-ink hover:text-accent">
+                                        {{ $arm->fullName() }}
+                                    </a>
+                                </td>
+                                <td class="text-muted">{{ $arm->stream ?? '—' }}</td>
+                                <td class="text-muted">{{ $arm->formTeacher?->name ?? '—' }}</td>
+                                <td class="num tnum">
+                                    {{ $arm->enrollments_count }}
+                                    <span class="text-faint">/ {{ $arm->capacity }}</span>
+                                </td>
+                                <td class="num tnum">{{ $arm->subject_assignments_count }}</td>
+                                <td><code class="text-xs text-muted">{{ $arm->invite_code }}</code></td>
+                                <td>
+                                    <div class="flex items-center justify-end gap-1.5">
+                                        <a href="{{ route('admin.classes.edit', $arm) }}" class="btn btn-ghost btn-sm"><x-icon name="pencil" /></a>
+                                        <a href="{{ route('admin.classes.show', $arm) }}" class="btn btn-outline btn-sm">Manage</a>
+                                    </div>
+                                </td>
+                            </tr>
+                        @endforeach
+                    </tbody>
+                </table>
+            </div>
         </div>
-        <table class="w-full text-sm">
-            <thead class="text-left text-muted border-b">
-                <tr><th class="px-5 py-2">Name</th><th class="px-5 py-2">Subject</th><th class="px-5 py-2">Teacher</th><th class="px-5 py-2">Term</th><th class="px-5 py-2"></th></tr>
-            </thead>
-            <tbody>
-                @forelse($classes as $c)
-                    <tr class="border-b">
-                        <td class="px-5 py-2">{{ $c->name }}</td>
-                        <td class="px-5 py-2 text-muted">{{ $c->subject?->name ?? '—' }}</td>
-                        <td class="px-5 py-2">{{ $c->teacher?->name ?? 'Unassigned' }}</td>
-                        <td class="px-5 py-2 text-muted">{{ $c->term?->name ?? '—' }}</td>
-                        <td class="px-5 py-2 text-right">
-                            <a href="{{ route('admin.classes.show', $c) }}" class="text-xs text-accent">View</a>
-                        </td>
-                    </tr>
-                @empty
-                    <tr><td colspan="5" class="px-5 py-4 text-faint">No classes yet.</td></tr>
-                @endforelse
-            </tbody>
-        </table>
-        <div class="px-5 py-3 border-t">{{ $classes->links() }}</div>
-    </div>
+    @endif
 </x-layouts.studyai>

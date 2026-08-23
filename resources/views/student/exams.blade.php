@@ -6,7 +6,7 @@
                 <li class="px-5 py-3 flex items-center justify-between gap-3">
                     <div>
                         <div class="font-medium">{{ $e->title }}</div>
-                        <div class="text-xs text-faint">{{ $e->classRoom?->name ?? 'General' }} · {{ $e->questions_count }} questions @if($e->duration)· {{ $e->duration }} min @endif</div>
+                        <div class="text-xs text-faint">{{ $e->classArm?->fullName() ?? 'General' }} · {{ $e->questions_count }} questions @if($e->duration)· {{ $e->duration }} min @endif</div>
                     </div>
                     <form method="POST" action="{{ route('student.exams.start', $e) }}">@csrf<button class="px-3 py-1 btn btn-primary text-xs">Start</button></form>
                 </li>

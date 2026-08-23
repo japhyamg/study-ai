@@ -4,7 +4,7 @@
         <ul class="divide-y text-sm">
             @forelse($materials as $m)
                 <li class="px-5 py-3 flex items-center justify-between">
-                    <div><div class="font-medium">{{ $m->title }}</div><div class="text-xs text-faint">{{ $m->type }} · {{ $m->classRoom?->name ?? 'General' }}</div></div>
+                    <div><div class="font-medium">{{ $m->title }}</div><div class="text-xs text-faint">{{ $m->type }} · {{ $m->classArm?->fullName() ?? 'General' }}</div></div>
                 </li>
             @empty
                 <li class="px-5 py-4 text-faint">No materials available.</li>

@@ -3,7 +3,8 @@
 namespace Tests\Feature;
 
 use App\Models\ClassEnrollment;
-use App\Models\ClassModel;
+use App\Models\ClassArm;
+use App\Models\ClassLevel;
 use App\Models\Exam;
 use App\Models\ExamAttempt;
 use App\Models\ExamQuestion;
@@ -24,11 +25,17 @@ class StudentExamFlowTest extends TestCase
         $student = User::create(['name' => 'S', 'email' => 's@e.com', 'password' => bcrypt('x')]);
         SchoolMember::create(['user_id' => $teacher->id, 'school_id' => $school->id, 'role' => SchoolMember::ROLE_TEACHER]);
         SchoolMember::create(['user_id' => $student->id, 'school_id' => $school->id, 'role' => SchoolMember::ROLE_STUDENT]);
-        $class = ClassModel::create(['name' => 'C', 'school_id' => $school->id, 'teacher_id' => $teacher->id]);
-        ClassEnrollment::create(['class_id' => $class->id, 'user_id' => $student->id, 'role' => 'student']);
+        $level = ClassLevel::create([
+            'school_id' => $school->id, 'name' => 'Year 7', 'code' => 'y7', 'position' => 1,
+        ]);
+        $class = ClassArm::create([
+            'school_id' => $school->id, 'class_level_id' => $level->id,
+            'name' => 'A', 'form_teacher_id' => $teacher->id,
+        ]);
+        ClassEnrollment::create(['class_arm_id' => $class->id, 'user_id' => $student->id, 'role' => 'student']);
 
         $exam = Exam::create([
-            'title' => 'E', 'school_id' => $school->id, 'class_id' => $class->id,
+            'title' => 'E', 'school_id' => $school->id, 'class_arm_id' => $class->id,
             'status' => Exam::STATUS_PUBLISHED, 'duration' => 10, 'pass_mark' => 50, 'created_by' => $teacher->id,
         ]);
         $q = ExamQuestion::create([

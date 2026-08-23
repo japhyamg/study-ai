@@ -17,7 +17,7 @@ class Material extends Model
     public $incrementing = false;
 
     protected $fillable = [
-        'school_id', 'class_id', 'subject_id', 'title', 'description',
+        'school_id', 'class_arm_id', 'subject_id', 'title', 'description',
         'type', 'source_url', 'storage_url', 'content', 'transcript',
         'status', 'review_status', 'published', 'published_at', 'created_by',
     ];
@@ -37,8 +37,7 @@ class Material extends Model
     const REVIEW_REJECTED = 'rejected';
 
     public function school(): BelongsTo { return $this->belongsTo(School::class); }
-    public function class(): BelongsTo { return $this->belongsTo(ClassModel::class, 'class_id'); }
-    public function classRoom(): BelongsTo { return $this->belongsTo(ClassModel::class, 'class_id'); }
+    public function classArm(): BelongsTo { return $this->belongsTo(ClassArm::class, 'class_arm_id'); }
     public function subject(): BelongsTo { return $this->belongsTo(Subject::class); }
     public function flashcards(): HasMany { return $this->hasMany(Flashcard::class); }
     public function questions(): HasMany { return $this->hasMany(Question::class); }

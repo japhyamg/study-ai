@@ -3,7 +3,7 @@
         <div>
             <a href="{{ route('student.study.index') }}" class="text-xs text-accent">← Study sets</a>
             <h2 class="font-display text-xl mt-1 text-ink">{{ $material->title }}</h2>
-            <p class="text-xs text-faint">{{ $material->subject?->name ?? 'General' }} · {{ $material->classRoom?->name ?? 'General' }}</p>
+            <p class="text-xs text-faint">{{ $material->subject?->name ?? 'General' }} · {{ $material->classArm?->fullName() ?? 'General' }}</p>
         </div>
     </div>
 

@@ -97,9 +97,16 @@ class User extends Authenticatable
         return $this->hasMany(ClassEnrollment::class);
     }
 
+    /** Arms where this user is the form teacher. */
     public function assignedClasses(): HasMany
     {
-        return $this->hasMany(ClassModel::class, 'teacher_id');
+        return $this->hasMany(ClassArm::class, 'form_teacher_id');
+    }
+
+    /** Per-subject teaching assignments across all arms. */
+    public function subjectAssignments(): HasMany
+    {
+        return $this->hasMany(ClassSubjectAssignment::class, 'teacher_id');
     }
 
     // ── Scopes ──

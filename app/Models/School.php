@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
@@ -29,6 +30,7 @@ class School extends Model
     protected $fillable = [
         'name', 'slug', 'subdomain', 'domain', 'logo', 'status', 'primary_color',
         'contact_email', 'phone', 'timezone', 'address', 'settings', 'trial_ends_at',
+        'current_session_id', 'current_term_id',
     ];
 
     protected function casts(): array
@@ -67,9 +69,39 @@ class School extends Model
         return $this->hasMany(StudentProfile::class);
     }
 
+    public function academicSessions(): HasMany
+    {
+        return $this->hasMany(AcademicSession::class);
+    }
+
+    public function currentSession(): BelongsTo
+    {
+        return $this->belongsTo(AcademicSession::class, 'current_session_id');
+    }
+
+    public function currentTerm(): BelongsTo
+    {
+        return $this->belongsTo(Term::class, 'current_term_id');
+    }
+
     public function terms(): HasMany
     {
         return $this->hasMany(Term::class);
+    }
+
+    public function classLevels(): HasMany
+    {
+        return $this->hasMany(ClassLevel::class)->orderBy('position');
+    }
+
+    public function classArms(): HasMany
+    {
+        return $this->hasMany(ClassArm::class);
+    }
+
+    public function assessmentTypes(): HasMany
+    {
+        return $this->hasMany(AssessmentType::class)->orderBy('position');
     }
 
     public function subjects(): HasMany
@@ -79,7 +111,7 @@ class School extends Model
 
     public function classes(): HasMany
     {
-        return $this->hasMany(ClassModel::class);
+        return $this->hasMany(ClassArm::class);
     }
 
     public function materials(): HasMany

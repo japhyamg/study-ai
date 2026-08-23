@@ -53,8 +53,8 @@ class ExamPolicy
             return $this->inSchool($user, $exam->school_id);
         }
         // student must be enrolled in the exam's class (if any)
-        if ($exam->class_id) {
-            return $exam->class->enrollments()->where('user_id', $user->id)->exists();
+        if ($exam->class_arm_id) {
+            return $exam->classArm?->enrollments()->where('user_id', $user->id)->exists() ?? false;
         }
         return $this->inSchool($user, $exam->school_id);
     }

@@ -21,7 +21,7 @@
                 @forelse($exams as $e)
                     <tr class="border-b">
                         <td class="px-5 py-2">{{ $e->title }}</td>
-                        <td class="px-5 py-2 text-muted">{{ $e->classRoom?->name ?? '—' }}</td>
+                        <td class="px-5 py-2 text-muted">{{ $e->classArm?->fullName() ?? '—' }}</td>
                         <td class="px-5 py-2">{{ $e->questions_count }}</td>
                         <td class="px-5 py-2">
                             <span class="px-2 py-0.5 rounded text-xs {{ $e->status==='published' ? 'bg-green-100 text-ok' : 'bg-paper-sunk text-muted' }}">{{ $e->status }}</span>

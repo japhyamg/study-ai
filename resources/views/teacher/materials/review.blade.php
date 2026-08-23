@@ -9,7 +9,7 @@
                 @forelse($materials as $m)
                     <tr class="border-b">
                         <td class="px-5 py-2">{{ $m->title }}</td>
-                        <td class="px-5 py-2 text-muted">{{ $m->classRoom?->name ?? '—' }}</td>
+                        <td class="px-5 py-2 text-muted">{{ $m->classArm?->fullName() ?? '—' }}</td>
                         <td class="px-5 py-2">{{ $m->type }}</td>
                         <td class="px-5 py-2">
                             <span class="px-2 py-0.5 rounded text-xs

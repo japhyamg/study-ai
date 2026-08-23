@@ -43,7 +43,7 @@ class TeacherProfile extends Model
 
     public function classes(): HasMany
     {
-        return $this->hasMany(ClassModel::class, 'teacher_id', 'user_id');
+        return $this->hasMany(ClassArm::class, 'form_teacher_id', 'user_id');
     }
 
     public function displayName(): string
