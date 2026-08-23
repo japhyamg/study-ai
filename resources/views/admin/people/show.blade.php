@@ -74,6 +74,18 @@
                         <x-ui.button type="submit">Save changes</x-ui.button>
                     </div>
                 </form>
+
+                <div class="mt-4 flex items-center justify-between border-t border-line pt-4">
+                    <p class="text-xs text-faint">
+                        Removing takes them out of this school. Their work stays.
+                    </p>
+
+                    <form method="POST" action="{{ route('admin.members.remove', $membership) }}"
+                          onsubmit="return confirm('Remove {{ $user->name }} from the school?')">
+                        @csrf @method('DELETE')
+                        <button type="submit" class="text-xs text-danger hover:underline">Remove</button>
+                    </form>
+                </div>
             </div>
 
             {{-- ── What they do here ── --}}

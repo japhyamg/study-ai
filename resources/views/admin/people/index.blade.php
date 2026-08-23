@@ -1,32 +1,37 @@
 @php
-    $tabs = [
-        'teacher' => ['label' => 'Teachers', 'route' => 'admin.teachers'],
-        'student' => ['label' => 'Students', 'route' => 'admin.students'],
-        'admin' => ['label' => 'Administrators', 'route' => 'admin.administrators'],
-    ];
+    $createRoute = match ($role) {
+        'teacher' => 'admin.teachers.create',
+        'student' => 'admin.students.create',
+        default => 'admin.administrators.create',
+    };
 
-    $roleLabels = [
-        'teacher' => 'Teacher',
-        'student' => 'Student',
-        'admin' => 'Administrator',
-    ];
+    $addLabel = match ($role) {
+        'teacher' => 'Add teacher',
+        'student' => 'Add student',
+        default => 'Add administrator',
+    };
 @endphp
 
 <x-layouts.studyai :title="$heading">
     <x-slot:actions>
-        <x-ui.button :href="route('admin.members')" variant="ghost">Invite people</x-ui.button>
+        <x-ui.button :href="route($createRoute)" icon="plus">{{ $addLabel }}</x-ui.button>
     </x-slot:actions>
 
-    {{-- The three role lists are the same page with a different filter, so
-         they read as tabs rather than separate destinations. --}}
-    <div class="mb-5 flex flex-wrap gap-1 border-b border-line">
-        @foreach ($tabs as $key => $tab)
-            <a href="{{ route($tab['route']) }}" class="tab-btn {{ $role === $key ? 'active' : '' }}">
-                {{ $tab['label'] }}
-                <span class="tnum ms-1 text-xs text-faint">({{ $counts[$key] ?? 0 }})</span>
-            </a>
-        @endforeach
-    </div>
+    {{-- Shown once, straight after the account is made: there is no mail set
+         up, so the admin has to hand these over themselves. --}}
+    @if (session('credentials'))
+        @php $c = session('credentials'); @endphp
+        <div class="alert-info mb-5">
+            <p class="font-medium">{{ $c['name'] }} was added.</p>
+            <p class="mt-1 text-sm">
+                Sign in with <span class="font-medium">{{ $c['login'] }}</span>
+                and password <span class="font-mono font-medium">{{ $c['password'] }}</span>.
+            </p>
+            <p class="mt-1 text-xs">
+                This password is not shown again. Pass it on and ask them to change it.
+            </p>
+        </div>
+    @endif
 
     <form method="GET" class="mb-4 flex max-w-md gap-2">
         <input name="search" value="{{ $search }}" class="input"

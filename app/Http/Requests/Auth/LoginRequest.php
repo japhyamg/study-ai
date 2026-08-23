@@ -24,7 +24,9 @@ class LoginRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'email' => ['required', 'string', 'email'],
+            // Staff sign in with an email address, students with the admission
+            // number their school issued, so the field takes either.
+            'login' => ['required', 'string', 'max:255'],
             'password' => ['required', 'string'],
         ];
     }
@@ -40,10 +42,25 @@ class LoginRequest extends FormRequest
         $this->ensureIsNotRateLimited();
 
         $tenant = app()->bound('tenant') ? app('tenant') : null;
+        $login = trim($this->string('login')->toString());
 
         $user = User::query()
-            ->when($tenant, fn ($q) => $q->where('school_id', $tenant->id))
-            ->where('email', $this->string('email')->lower()->toString())
+            ->when($tenant, fn ($q) => $q->where('users.school_id', $tenant->id))
+            ->where(function ($q) use ($login, $tenant) {
+                $q->whereRaw('LOWER(users.email) = ?', [mb_strtolower($login)]);
+
+                // An admission number is only unique within a school, so it is
+                // never accepted without a tenant to scope it to.
+                if ($tenant) {
+                    $q->orWhereExists(function ($sub) use ($login, $tenant) {
+                        $sub->selectRaw('1')
+                            ->from('student_profiles')
+                            ->whereColumn('student_profiles.user_id', 'users.id')
+                            ->where('student_profiles.school_id', $tenant->id)
+                            ->whereRaw('LOWER(student_profiles.admission_number) = ?', [mb_strtolower($login)]);
+                    });
+                }
+            })
             ->first();
 
         // Hash even on a miss so response timing doesn't reveal account existence.
@@ -55,13 +72,13 @@ class LoginRequest extends FormRequest
             RateLimiter::hit($this->throttleKey());
 
             throw ValidationException::withMessages([
-                'email' => trans('auth.failed'),
+                'login' => trans('auth.failed'),
             ]);
         }
 
         if (! $user->is_active) {
             throw ValidationException::withMessages([
-                'email' => 'This account has been deactivated. Please contact your school administrator.',
+                'login' => 'This account has been deactivated. Please contact your school administrator.',
             ]);
         }
 
@@ -103,13 +120,13 @@ class LoginRequest extends FormRequest
         ]);
     }
 
-    /** Throttle per email + tenant + IP. */
+    /** Throttle per identifier + tenant + IP. */
     public function throttleKey(): string
     {
         $tenant = app()->bound('tenant') ? app('tenant')?->id : 'central';
 
         return Str::transliterate(
-            Str::lower($this->string('email')).'|'.$tenant.'|'.$this->ip()
+            Str::lower($this->string('login')).'|'.$tenant.'|'.$this->ip()
         );
     }
 }

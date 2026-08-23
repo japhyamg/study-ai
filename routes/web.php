@@ -130,14 +130,16 @@ Route::middleware(['auth', 'school.user', '2fa', 'role:admin'])
         Route::post('classes/{class}/invite-codes', [ClassArmController::class, 'storeInviteCode'])->name('classes.invite-codes.store');
 
         // People — one screen per user type, backed by separate profile tables
-        Route::get('members', [AdminController::class, 'members'])->name('members');
         Route::get('teachers', [AdminController::class, 'teachers'])->name('teachers');
         Route::get('students', [AdminController::class, 'students'])->name('students');
         Route::get('administrators', [AdminController::class, 'administrators'])->name('administrators');
         Route::get('people/{user}', [AdminController::class, 'showUser'])->name('people.show');
         Route::put('people/{user}', [AdminController::class, 'updateUser'])->name('people.update');
-        Route::post('members/invite', [AdminController::class, 'inviteMember'])->name('members.invite');
-        Route::post('members/bulk-invite', [AdminController::class, 'bulkInviteMembers'])->name('members.bulk-invite');
+        // People are added directly, each role through its own form.
+        Route::get('teachers/new', [AdminController::class, 'createTeacher'])->name('teachers.create');
+        Route::get('students/new', [AdminController::class, 'createStudent'])->name('students.create');
+        Route::get('administrators/new', [AdminController::class, 'createAdministrator'])->name('administrators.create');
+        Route::post('people', [AdminController::class, 'storePerson'])->name('people.store');
         Route::delete('members/{member}', [AdminController::class, 'removeMember'])->name('members.remove');
         Route::put('members/{member}', [AdminController::class, 'updateMemberRole'])->name('members.role');
 

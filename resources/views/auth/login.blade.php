@@ -5,9 +5,12 @@
     <form method="POST" action="{{ route('login') }}" class="space-y-4">
         @csrf
 
-        <x-ui.field label="Email address" name="email" required>
-            <input id="email" name="email" type="email" class="input"
-                   value="{{ old('email') }}" required autofocus autocomplete="username"
+        {{-- One field for both: staff have an email address, students are given
+             an admission number and usually have no school email at all. --}}
+        <x-ui.field label="Email or admission number" name="login" required
+                    hint="Students: use the admission number your school gave you.">
+            <input id="login" name="login" type="text" class="input"
+                   value="{{ old('login') }}" required autofocus autocomplete="username"
                    placeholder="you@school.edu">
         </x-ui.field>
 

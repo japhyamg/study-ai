@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\ClassArm;
+use App\Models\ClassEnrollment;
 use App\Models\ClassSubjectAssignment;
 use App\Models\ExamAttempt;
 use App\Models\School;
@@ -12,6 +13,8 @@ use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
+use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
 use Illuminate\Validation\Rule;
 
@@ -120,21 +123,6 @@ class AdminController extends Controller
     }
 
     // ── Members ──
-    public function members(Request $request): View
-    {
-        $school = $this->school();
-        $search = trim((string) $request->get('search', ''));
-
-        $members = SchoolMember::with(['user'])
-            ->where('school_id', $school?->id)
-            ->when($search, fn ($q) => $q->whereHas('user', fn ($u) => $this->searchUser($u, $search)))
-            ->orderByDesc('school_members.created_at')
-            ->paginate(25)
-            ->withQueryString();
-
-        return view('admin.members.index', compact('members', 'search'));
-    }
-
     public function teachers(Request $request): View
     {
         return $this->people($request, SchoolMember::ROLE_TEACHER, 'Teachers');
@@ -176,12 +164,7 @@ class AdminController extends Controller
             ->paginate(25)
             ->withQueryString();
 
-        $counts = SchoolMember::where('school_id', $school?->id)
-            ->selectRaw('role, count(*) as total')
-            ->groupBy('role')
-            ->pluck('total', 'role');
-
-        return view('admin.people.index', compact('members', 'search', 'role', 'heading', 'counts'));
+        return view('admin.people.index', compact('members', 'search', 'role', 'heading'));
     }
 
     /**
@@ -296,70 +279,205 @@ class AdminController extends Controller
         });
     }
 
-    public function inviteMember(Request $request): RedirectResponse
+    public function createTeacher(): View
     {
-        $school = $this->school();
-        $data = $request->validate([
-            'email' => 'required|email',
-            'name' => 'nullable|string|max:255',
-            'role' => ['required', Rule::in([SchoolMember::ROLE_ADMIN, SchoolMember::ROLE_TEACHER, SchoolMember::ROLE_STUDENT])],
+        return view('admin.people.create', [
+            'role' => SchoolMember::ROLE_TEACHER,
+            'heading' => 'Add a teacher',
+            'subjects' => Subject::where('school_id', $this->school()?->id)->orderBy('name')->get(),
         ]);
-
-        $user = User::firstOrCreate(
-            ['email' => $data['email']],
-            [
-                'name' => $data['name'] ?? explode('@', $data['email'])[0],
-                'password' => Hash::make(substr(md5(uniqid((string) mt_rand(), true)), 0, 12)),
-            ]
-        );
-
-        SchoolMember::updateOrCreate(
-            ['user_id' => $user->id, 'school_id' => $school?->id],
-            ['role' => $data['role']]
-        );
-
-        return back()->with('status', 'Member invited.');
     }
 
-    public function bulkInviteMembers(Request $request): RedirectResponse
+    public function createStudent(): View
     {
         $school = $this->school();
+
+        return view('admin.people.create', [
+            'role' => SchoolMember::ROLE_STUDENT,
+            'heading' => 'Add a student',
+            'classes' => ClassArm::with('classLevel')
+                ->where('school_id', $school?->id)
+                ->get()
+                ->sortBy(fn ($a) => [$a->classLevel?->position ?? 0, $a->name])
+                ->values(),
+        ]);
+    }
+
+    public function createAdministrator(): View
+    {
+        return view('admin.people.create', [
+            'role' => SchoolMember::ROLE_ADMIN,
+            'heading' => 'Add an administrator',
+        ]);
+    }
+
+    /**
+     * Create a person and their profile.
+     *
+     * Each role is added through its own form because the details genuinely
+     * differ: a student has an admission number, a guardian and a class, while
+     * a teacher has a staff number and a department. One shared form would ask
+     * everyone for all of it.
+     */
+    public function storePerson(Request $request): RedirectResponse
+    {
+        $school = $this->school();
+        $schoolId = $school?->id;
+
+        $role = $request->input('role');
+
+        abort_unless(in_array($role, [
+            SchoolMember::ROLE_TEACHER, SchoolMember::ROLE_STUDENT, SchoolMember::ROLE_ADMIN,
+        ], true), 404);
+
+        $isStudent = $role === SchoolMember::ROLE_STUDENT;
+
         $data = $request->validate([
-            'emails' => 'required|string',
-            'role' => ['required', Rule::in([SchoolMember::ROLE_ADMIN, SchoolMember::ROLE_TEACHER, SchoolMember::ROLE_STUDENT])],
+            'name' => ['required', 'string', 'max:255'],
+
+            // A student signs in with their admission number, so an email is
+            // optional for them and required for everyone else.
+            'email' => [
+                $isStudent ? 'nullable' : 'required',
+                'email', 'max:255',
+                Rule::unique('users', 'email')->where(fn ($q) => $q->where('school_id', $schoolId)),
+            ],
+            'phone' => ['nullable', 'string', 'max:40'],
+            'password' => ['nullable', 'string', 'min:8'],
+
+            // Student
+            'admission_number' => [
+                Rule::requiredIf($isStudent), 'nullable', 'string', 'max:50',
+                Rule::unique('student_profiles', 'admission_number')
+                    ->where(fn ($q) => $q->where('school_id', $schoolId)),
+            ],
+            'class_arm_id' => ['nullable', 'exists:class_arms,id'],
+            'date_of_birth' => ['nullable', 'date'],
+            'gender' => ['nullable', 'string', 'max:20'],
+            'guardian_name' => ['nullable', 'string', 'max:255'],
+            'guardian_phone' => ['nullable', 'string', 'max:40'],
+            'guardian_email' => ['nullable', 'email', 'max:255'],
+
+            // Staff
+            'staff_number' => ['nullable', 'string', 'max:50'],
+            'department' => ['nullable', 'string', 'max:255'],
+            'job_title' => ['nullable', 'string', 'max:255'],
+            'qualification' => ['nullable', 'string', 'max:255'],
         ]);
 
-        $emails = array_filter(array_map('trim', preg_split('/[\s,;]+/', $data['emails'])));
-        $count = 0;
-        foreach ($emails as $email) {
-            if (! filter_var($email, FILTER_VALIDATE_EMAIL)) {
-                continue;
+        // Given by the admin, or generated so the account is never left with a
+        // guessable password. Either way it is shown once on the next screen.
+        $password = $data['password'] ?? Str::password(12, symbols: false);
+
+        $user = DB::transaction(function () use ($data, $role, $schoolId, $password, $isStudent) {
+            $user = User::create([
+                'school_id' => $schoolId,
+                'name' => $data['name'],
+                'email' => $data['email'] ?? null,
+                'phone' => $data['phone'] ?? null,
+                'password' => Hash::make($password),
+                'is_active' => true,
+            ]);
+
+            SchoolMember::create([
+                'user_id' => $user->id,
+                'school_id' => $schoolId,
+                'role' => $role,
+            ]);
+
+            if ($isStudent) {
+                $user->studentProfile()->create([
+                    'school_id' => $schoolId,
+                    'admission_number' => $data['admission_number'],
+                    'date_of_birth' => $data['date_of_birth'] ?? null,
+                    'gender' => $data['gender'] ?? null,
+                    'guardian_name' => $data['guardian_name'] ?? null,
+                    'guardian_phone' => $data['guardian_phone'] ?? null,
+                    'guardian_email' => $data['guardian_email'] ?? null,
+                    'enrolled_on' => now(),
+                ]);
+
+                if (! empty($data['class_arm_id'])) {
+                    // class_enrollments carries no school_id; the arm supplies it.
+                    ClassEnrollment::firstOrCreate([
+                        'class_arm_id' => $data['class_arm_id'],
+                        'user_id' => $user->id,
+                    ], [
+                        'role' => SchoolMember::ROLE_STUDENT,
+                        'enrolled_at' => now(),
+                    ]);
+                }
             }
-            $user = User::firstOrCreate(
-                ['email' => $email],
-                [
-                    'name' => explode('@', $email)[0],
-                    'password' => Hash::make(substr(md5(uniqid((string) mt_rand(), true)), 0, 12)),
-                ]
-            );
-            SchoolMember::updateOrCreate(
-                ['user_id' => $user->id, 'school_id' => $school?->id],
-                ['role' => $data['role']]
-            );
-            $count++;
-        }
 
-        return back()->with('status', "{$count} members invited.");
+            if ($role === SchoolMember::ROLE_TEACHER) {
+                $user->teacherProfile()->create([
+                    'school_id' => $schoolId,
+                    'staff_number' => $data['staff_number'] ?? null,
+                    'department' => $data['department'] ?? null,
+                    'qualification' => $data['qualification'] ?? null,
+                ]);
+            }
+
+            if ($role === SchoolMember::ROLE_ADMIN) {
+                $user->adminProfile()->create([
+                    'school_id' => $schoolId,
+                    'staff_number' => $data['staff_number'] ?? null,
+                    'job_title' => $data['job_title'] ?? null,
+                    'department' => $data['department'] ?? null,
+                ]);
+            }
+
+            return $user;
+        });
+
+        $listRoute = match ($role) {
+            SchoolMember::ROLE_TEACHER => 'admin.teachers',
+            SchoolMember::ROLE_STUDENT => 'admin.students',
+            default => 'admin.administrators',
+        };
+
+        // Flashed rather than emailed: there is no mail configured, and the
+        // admin needs to hand these over in person.
+        return redirect()->route($listRoute)->with('credentials', [
+            'name' => $user->name,
+            'login' => $isStudent ? $data['admission_number'] : $data['email'],
+            'password' => $password,
+        ]);
     }
 
-    public function removeMember(SchoolMember $member): RedirectResponse
+    public function removeMember(Request $request, SchoolMember $member): RedirectResponse
     {
         $school = $this->school();
+
         if ($member->school_id !== $school?->id) {
             abort(403);
         }
+
+        if ($member->user_id === $request->user()->id) {
+            return back()->withErrors(['member' => 'You cannot remove your own account.']);
+        }
+
+        // The same reasoning as demotion: a school with no administrator left
+        // cannot be managed by anyone.
+        if ($member->role === SchoolMember::ROLE_ADMIN) {
+            $admins = SchoolMember::where('school_id', $school?->id)
+                ->where('role', SchoolMember::ROLE_ADMIN)
+                ->count();
+
+            if ($admins <= 1) {
+                return back()->withErrors(['member' => 'This is the only administrator.']);
+            }
+        }
+
+        $listRoute = match ($member->role) {
+            SchoolMember::ROLE_TEACHER => 'admin.teachers',
+            SchoolMember::ROLE_STUDENT => 'admin.students',
+            default => 'admin.administrators',
+        };
+
         $member->delete();
-        return back()->with('status', 'Member removed.');
+
+        return redirect()->route($listRoute)->with('status', 'Person removed from the school.');
     }
 
     public function updateMemberRole(Request $request, SchoolMember $member): RedirectResponse
