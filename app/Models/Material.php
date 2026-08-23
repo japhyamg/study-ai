@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\Learning\MaterialParserService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -9,6 +10,9 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
+use Throwable;
 
 /**
  * A teacher's source material and everything AI derives from it.
@@ -31,6 +35,12 @@ class Material extends Model
     protected $keyType = 'string';
 
     public $incrementing = false;
+
+    /** Per-request memo for {@see sourceText()}. */
+    private ?string $sourceText = null;
+
+    /** Why the memoised parse came back empty, if it did. */
+    private ?string $sourceTextError = null;
 
     protected $fillable = [
         'school_id', 'class_arm_id', 'subject_id', 'title', 'description',
@@ -122,6 +132,30 @@ class Material extends Model
         self::STATE_REJECTED => 'Rejected',
         self::STATE_PUBLISHED => 'Published',
     ];
+
+    protected static function booted(): void
+    {
+        // The upload is the source of truth, so it has to be cleaned up with
+        // the record — an orphaned file would otherwise sit in storage
+        // forever. Done here rather than in the controller so every delete
+        // path is covered.
+        static::deleting(function (self $material) {
+            if (! $material->file_path) {
+                return;
+            }
+
+            try {
+                Storage::disk(config('ai.uploads.disk', 'local'))->delete($material->file_path);
+            } catch (Throwable $e) {
+                // A failed cleanup should not block the delete.
+                Log::warning('Could not remove material file', [
+                    'material_id' => $material->id,
+                    'path' => $material->file_path,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        });
+    }
 
     // ── Relations ──
 
@@ -305,9 +339,86 @@ class Material extends Model
         };
     }
 
-    /** The text AI should work from, in order of preference. */
+    /**
+     * The text AI works from.
+     *
+     * For an uploaded document the file is the source of truth: it is stored
+     * on disk and parsed on demand, never transcribed into the database. That
+     * keeps a 900-page textbook out of every row, means a parser improvement
+     * benefits material uploaded before it, and removes an entire class of
+     * database failure (encoding, column size) from the upload path.
+     *
+     * Pasted text has no file, so it is stored in `content` as before.
+     *
+     * Parsing is memoised per request — a page that shows the extracted text
+     * and its length should not read the file twice.
+     */
     public function sourceText(): string
     {
-        return trim((string) ($this->content ?: $this->transcript ?: $this->description ?: ''));
+        if ($this->sourceText !== null) {
+            return $this->sourceText;
+        }
+
+        if ($this->file_path) {
+            return $this->sourceText = $this->extractFromFile();
+        }
+
+        return $this->sourceText = trim((string) ($this->content ?: $this->transcript ?: $this->description ?: ''));
+    }
+
+    /**
+     * Read and parse the stored upload.
+     *
+     * Returns an empty string rather than throwing: callers treat "no text" as
+     * a state to report, and a missing file should not 500 a page that merely
+     * displays the material.
+     */
+    private function extractFromFile(): string
+    {
+        $disk = Storage::disk(config('ai.uploads.disk', 'local'));
+
+        if (! $disk->exists($this->file_path)) {
+            Log::warning('Material file missing', [
+                'material_id' => $this->id,
+                'path' => $this->file_path,
+            ]);
+
+            $this->sourceTextError = 'The uploaded file is missing from storage. Re-upload it to generate content.';
+
+            return '';
+        }
+
+        try {
+            return app(MaterialParserService::class)->parseFile(
+                $disk->path($this->file_path),
+                $this->file_type ?: null
+            );
+        } catch (Throwable $e) {
+            Log::warning('Material could not be parsed', [
+                'material_id' => $this->id,
+                'error' => $e->getMessage(),
+            ]);
+
+            // Parser messages are written for teachers, so they are safe to
+            // show directly.
+            $this->sourceTextError = $e->getMessage();
+
+            return '';
+        }
+    }
+
+    /**
+     * Why {@see sourceText()} came back empty, for the UI to explain.
+     *
+     * Recorded during the parse rather than worked out again afterwards — a
+     * second read of a large PDF just to produce an error string is wasteful.
+     */
+    public function sourceTextError(): ?string
+    {
+        if ($this->sourceText === null) {
+            $this->sourceText();
+        }
+
+        return $this->sourceTextError;
     }
 }

@@ -397,15 +397,18 @@ class TeacherController extends Controller
             ]);
         }
 
-        // Extract in-request so an unreadable file (a scan, say) fails now with
-        // a message the teacher can act on, rather than in a queued job later.
+        // An uploaded document is stored as a file and parsed on demand — the
+        // extracted text is never copied into the database. Parse once here
+        // anyway, purely to validate: an unreadable file (a scan, say) should
+        // be rejected now, with a message the teacher can act on, rather than
+        // silently producing nothing at generation time.
         $parser = app(\App\Services\Learning\MaterialParserService::class);
         $text = $data['content'] ?? null;
         $storedPath = null;
 
         if ($file) {
             try {
-                $text = $parser->parse($file);
+                $extracted = $parser->parse($file);
             } catch (\RuntimeException $e) {
                 return back()->withInput()->withErrors(['document' => $e->getMessage()]);
             }
@@ -414,6 +417,17 @@ class TeacherController extends Controller
                 config('ai.uploads.path', 'materials'),
                 config('ai.uploads.disk', 'local')
             );
+
+            if (! $storedPath) {
+                return back()->withInput()->withErrors([
+                    'document' => 'The file could not be saved. Try again.',
+                ]);
+            }
+
+            // The file is the source of truth from here on; keep only enough
+            // to describe it in the UI without re-reading it.
+            $text = null;
+            $extractedLength = mb_strlen($extracted);
         }
 
         $type = $file
@@ -447,10 +461,14 @@ class TeacherController extends Controller
         // Generation is a separate, deliberate step on the material's own
         // page — the teacher picks question count and types there, having
         // seen what was actually extracted.
-        return redirect()->route('learning.materials.show', $material)
-            ->with('status', filled($text)
-                ? 'Uploaded. Review the extracted text, then generate study content.'
-                : 'Saved as a draft.');
+        $status = match (true) {
+            isset($extractedLength) => 'Uploaded — '.number_format($extractedLength)
+                .' characters read. Review it, then generate study content.',
+            filled($text) => 'Saved. Review it, then generate study content.',
+            default => 'Saved as a draft.',
+        };
+
+        return redirect()->route('learning.materials.show', $material)->with('status', $status);
     }
 
     /**
@@ -525,6 +543,13 @@ class TeacherController extends Controller
         // the same problem as filing it there in the first place.
         if ($error = $this->assignmentError($data['class_arm_id'] ?? null, $data['subject_id'] ?? null)) {
             return back()->withInput()->withErrors($error);
+        }
+
+        // For an uploaded document the file is the source of truth, so a
+        // pasted-content edit would be silently ignored at generation time.
+        // Drop it rather than store something that has no effect.
+        if ($material->file_path) {
+            unset($data['content']);
         }
 
         $material->update($data);

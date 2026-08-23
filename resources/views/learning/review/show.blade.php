@@ -20,7 +20,11 @@
     ], true);
 
     $hasContent = $material->hasGeneratedContent();
-    $hasText = $material->sourceText() !== '';
+
+    // Parsed on demand for uploads, so read it once and reuse.
+    $sourceText = $material->sourceText();
+    $hasText = $sourceText !== '';
+    $sourceError = $hasText ? null : $material->sourceTextError();
 
     // Generation is available whenever the material is not mid-run and has
     // text to work from. First run and re-run are the same action.
@@ -185,7 +189,7 @@
                         <div class="surface p-8 text-center">
                             <h3 class="font-medium text-ink">Ready to generate</h3>
                             <p class="mx-auto mt-1 max-w-md text-sm text-muted">
-                                {{ number_format(mb_strlen($material->sourceText())) }} characters were extracted from
+                                {{ number_format(mb_strlen($sourceText)) }} characters were extracted from
                                 {{ $material->file_name ?? 'this material' }}. Generate a study guide, flashcards and a
                                 quiz from it.
                             </p>
@@ -197,7 +201,7 @@
                         </div>
                     @elseif (! $hasText)
                         <x-ui.empty icon="document" title="No text to work from"
-                                    message="This material has no extracted text, so nothing can be generated. Edit it and paste the content in." />
+                                    :message="$sourceError ?? 'This material has no text, so nothing can be generated. Edit it and paste the content in.'" />
                     @else
                         <x-ui.empty icon="document" title="No study guide"
                                     message="Nothing has been generated for this material yet." />
@@ -350,11 +354,29 @@
                         </div>
                     @endif
 
-                    @if ($material->sourceText())
+                    @if ($hasText)
                         <details class="mt-4 border-t border-line pt-4">
-                            <summary class="cursor-pointer text-sm text-accent">Extracted text</summary>
-                            <pre class="mt-2 max-h-96 overflow-auto whitespace-pre-wrap rounded-md bg-surface-sunk p-3 text-xs text-muted">{{ $material->sourceText() }}</pre>
+                            <summary class="cursor-pointer text-sm text-accent">
+                                Extracted text
+                                <span class="text-xs text-faint">
+                                    ({{ number_format(mb_strlen($sourceText)) }} characters)
+                                </span>
+                            </summary>
+
+                            @if ($material->file_path)
+                                <p class="mt-2 text-xs text-faint">
+                                    Read from the stored file each time content is generated — nothing is
+                                    copied into the database, so improvements to the reader apply here too.
+                                </p>
+                            @endif
+
+                            <pre class="mt-2 max-h-96 overflow-auto whitespace-pre-wrap rounded-md bg-surface-sunk p-3 text-xs text-muted">{{ $sourceText }}</pre>
                         </details>
+                    @elseif ($sourceError)
+                        <div class="mt-4 rounded-md border border-danger/30 bg-danger/5 px-3 py-2 text-sm">
+                            <div class="font-medium text-danger">Could not read this file</div>
+                            <p class="mt-1 text-muted">{{ $sourceError }}</p>
+                        </div>
                     @endif
                 </div>
             </div>

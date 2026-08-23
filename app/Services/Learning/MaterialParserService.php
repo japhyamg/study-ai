@@ -26,22 +26,52 @@ class MaterialParserService
     public function parse(UploadedFile|string|null $input): string
     {
         if (is_string($input)) {
-            return $this->cleanText($input);
+            return $this->capLength($this->cleanText($input));
         }
 
         if ($input === null) {
             throw new RuntimeException('No material provided. Upload a file or paste the text.');
         }
 
-        $type = $this->detectType($input);
+        return $this->parseFile(
+            (string) $input->getRealPath(),
+            $this->detectType($input)
+        );
+    }
+
+    /**
+     * Extract text from a file already on disk.
+     *
+     * Uploaded documents are stored, not transcribed into the database, so the
+     * text has to be recoverable from the stored copy at generation time. This
+     * is that path: same pipeline, no UploadedFile required.
+     *
+     * @param  string  $path  absolute path to a readable file
+     * @param  string|null  $type  pdf|docx|txt|image; sniffed from the bytes when omitted
+     *
+     * @throws RuntimeException with a message safe to show the user
+     */
+    public function parseFile(string $path, ?string $type = null): string
+    {
+        if (! is_readable($path)) {
+            throw new RuntimeException('The uploaded file could not be found. Re-upload it and try again.');
+        }
+
+        $type ??= $this->detectTypeFromPath($path);
 
         $text = match ($type) {
-            'pdf' => $this->parsePdf($input),
-            'docx' => $this->parseDocx($input),
+            'pdf' => $this->parsePdf($path),
+            'docx' => $this->parseDocx($path),
             'image' => throw new RuntimeException(
                 'Images cannot be read yet. Paste the text from the image, or upload a PDF or Word file.'
             ),
-            default => $this->parsePlainText($input),
+            // A ZIP that is not a .docx — a .pptx or .xlsx, most likely.
+            // Falling through to the plain-text reader would report a
+            // confusing encoding error instead of the real problem.
+            'archive' => throw new RuntimeException(
+                'That file type cannot be read. Upload a PDF, Word document or plain text file.'
+            ),
+            default => $this->parsePlainText($path),
         };
 
         if (! $this->isReadableText($text)) {
@@ -82,7 +112,7 @@ class MaterialParserService
      */
     public function detectType(UploadedFile $file): string
     {
-        $header = $this->readHeader($file, 8);
+        $header = $this->readHeader((string) $file->getRealPath(), 8);
 
         if (str_starts_with($header, '%PDF')) {
             return 'pdf';
@@ -106,11 +136,36 @@ class MaterialParserService
         };
     }
 
-    private function readHeader(UploadedFile $file, int $bytes): string
+    /**
+     * Same detection for a file on disk, where there is no client-supplied
+     * MIME type or original filename to consult — only the bytes and the
+     * stored extension.
+     */
+    public function detectTypeFromPath(string $path): string
     {
-        $path = $file->getRealPath();
+        $header = $this->readHeader($path, 8);
 
-        if (! $path) {
+        if (str_starts_with($header, '%PDF')) {
+            return 'pdf';
+        }
+
+        $extension = strtolower(pathinfo($path, PATHINFO_EXTENSION));
+
+        if (str_starts_with($header, 'PK')) {
+            return $extension === 'docx' ? 'docx' : 'archive';
+        }
+
+        return match (true) {
+            $extension === 'pdf' => 'pdf',
+            in_array($extension, ['docx', 'doc'], true) => 'docx',
+            in_array($extension, ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp'], true) => 'image',
+            default => 'txt',
+        };
+    }
+
+    private function readHeader(string $path, int $bytes): string
+    {
+        if ($path === '' || ! is_readable($path)) {
             return '';
         }
 
@@ -128,10 +183,8 @@ class MaterialParserService
 
     // ───────────────────────── PDF ─────────────────────────
 
-    private function parsePdf(UploadedFile $file): string
+    private function parsePdf(string $path): string
     {
-        $path = $file->getRealPath();
-
         // pdftotext handles layout, ligatures and encodings far better than
         // anything we can do in PHP. Use it when the host provides it.
         $text = $this->tryPdfToText($path);
@@ -151,9 +204,9 @@ class MaterialParserService
         );
     }
 
-    private function tryPdfToText(?string $path): ?string
+    private function tryPdfToText(string $path): ?string
     {
-        if (! $path || ! function_exists('shell_exec')) {
+        if ($path === '' || ! function_exists('shell_exec')) {
             return null;
         }
 
@@ -305,7 +358,7 @@ class MaterialParserService
 
     // ───────────────────────── DOCX ─────────────────────────
 
-    private function parseDocx(UploadedFile $file): string
+    private function parseDocx(string $path): string
     {
         if (! class_exists(ZipArchive::class)) {
             throw new RuntimeException('Word files cannot be read on this server. Save the document as a PDF and upload that instead.');
@@ -313,7 +366,7 @@ class MaterialParserService
 
         $zip = new ZipArchive;
 
-        if ($zip->open((string) $file->getRealPath()) !== true) {
+        if ($zip->open($path) !== true) {
             throw new RuntimeException('This Word file could not be opened. It may be corrupt — try re-saving it, or paste the text directly.');
         }
 
@@ -340,9 +393,9 @@ class MaterialParserService
 
     // ───────────────────────── plain text ─────────────────────────
 
-    private function parsePlainText(UploadedFile $file): string
+    private function parsePlainText(string $path): string
     {
-        $text = @file_get_contents((string) $file->getRealPath());
+        $text = @file_get_contents($path);
 
         if ($text === false || trim($text) === '') {
             throw new RuntimeException('That file appears to be empty.');
