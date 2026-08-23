@@ -147,7 +147,7 @@ class TeacherController extends Controller
     {
         $this->authorize('view', $exam);
 
-        $exam->load(['questions', 'classArm']);
+        $exam->load(['questions', 'classArm', 'subject']);
 
         // The exam's own subject, not one guessed from the class arm — an arm
         // teaches many subjects, so the old first() picked an arbitrary one.
@@ -259,7 +259,21 @@ class TeacherController extends Controller
     public function destroyExam(Exam $exam): RedirectResponse
     {
         $this->authorize('delete', $exam);
+
+        // exam_attempts cascades on delete, so removing an exam students have
+        // already sat would take their results with it without warning. Make
+        // that a refusal rather than a surprise.
+        $sat = $exam->attempts()->where('submitted', true)->count();
+
+        if ($sat > 0) {
+            return back()->withErrors([
+                'exam' => "This exam cannot be deleted: {$sat} ".Str::plural('student', $sat).
+                          ' already sat it. Unpublish it instead to take it out of circulation.',
+            ]);
+        }
+
         $exam->delete();
+
         return redirect()->route('teacher.exams.index')->with('status', 'Exam deleted.');
     }
 

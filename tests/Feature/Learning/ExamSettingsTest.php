@@ -6,6 +6,7 @@ use App\Models\ClassArm;
 use App\Models\ClassLevel;
 use App\Models\ClassSubjectAssignment;
 use App\Models\Exam;
+use App\Models\ExamAttempt;
 use App\Models\School;
 use App\Models\SchoolMember;
 use App\Models\Subject;
@@ -279,4 +280,115 @@ class ExamSettingsTest extends TestCase
         $this->assertEquals(65, $exam->pass_mark);
         $this->assertEquals(2, $exam->max_attempts);
     }
+
+    public function test_a_teacher_can_delete_an_exam_they_created(): void
+    {
+        $exam = Exam::create([
+            'school_id' => $this->school->id,
+            'title' => 'Mistake',
+            'status' => Exam::STATUS_DRAFT,
+            'created_by' => $this->mathsTeacher->id,
+        ]);
+
+        $this->actingAs($this->mathsTeacher)
+            ->delete(route('teacher.exams.destroy', $exam))
+            ->assertRedirect(route('teacher.exams.index'));
+
+        $this->assertDatabaseMissing('exams', ['id' => $exam->id]);
+    }
+
+    public function test_a_teacher_cannot_delete_someone_elses_exam(): void
+    {
+        $other = $this->user('other@test.test', SchoolMember::ROLE_TEACHER);
+
+        $exam = Exam::create([
+            'school_id' => $this->school->id,
+            'title' => 'Not yours',
+            'status' => Exam::STATUS_DRAFT,
+            'created_by' => $other->id,
+        ]);
+
+        $this->actingAs($this->mathsTeacher)
+            ->delete(route('teacher.exams.destroy', $exam))
+            ->assertForbidden();
+
+        $this->assertDatabaseHas('exams', ['id' => $exam->id]);
+    }
+
+    public function test_an_exam_students_have_sat_is_not_deleted(): void
+    {
+        $exam = Exam::create([
+            'school_id' => $this->school->id,
+            'title' => 'Already sat',
+            'status' => Exam::STATUS_PUBLISHED,
+            'created_by' => $this->mathsTeacher->id,
+        ]);
+
+        $student = $this->user('sat@test.test', SchoolMember::ROLE_STUDENT);
+
+        // exam_attempts cascades, so deleting here would destroy the results.
+        ExamAttempt::create([
+            'exam_id' => $exam->id,
+            'user_id' => $student->id,
+            'submitted' => true,
+            'answers' => [],
+        ]);
+
+        $this->actingAs($this->mathsTeacher)
+            ->delete(route('teacher.exams.destroy', $exam))
+            ->assertSessionHasErrors('exam');
+
+        $this->assertDatabaseHas('exams', ['id' => $exam->id]);
+    }
+
+    public function test_an_unfinished_attempt_does_not_block_deletion(): void
+    {
+        $exam = Exam::create([
+            'school_id' => $this->school->id,
+            'title' => 'Abandoned',
+            'status' => Exam::STATUS_PUBLISHED,
+            'created_by' => $this->mathsTeacher->id,
+        ]);
+
+        $student = $this->user('abandoned@test.test', SchoolMember::ROLE_STUDENT);
+
+        ExamAttempt::create([
+            'exam_id' => $exam->id,
+            'user_id' => $student->id,
+            'submitted' => false,
+            'answers' => [],
+        ]);
+
+        $this->actingAs($this->mathsTeacher)
+            ->delete(route('teacher.exams.destroy', $exam))
+            ->assertRedirect(route('teacher.exams.index'));
+
+        $this->assertDatabaseMissing('exams', ['id' => $exam->id]);
+    }
+
+    public function test_the_exam_page_shows_the_details_instead_of_the_topbar(): void
+    {
+        $exam = Exam::create([
+            'school_id' => $this->school->id,
+            'title' => 'Mid-term',
+            'status' => Exam::STATUS_DRAFT,
+            'created_by' => $this->mathsTeacher->id,
+            'duration' => 45,
+            'pass_mark' => 60,
+            'max_attempts' => 2,
+        ]);
+
+        $this->actingAs($this->mathsTeacher)
+            ->get(route('teacher.exams.show', $exam))
+            ->assertOk()
+            ->assertSee('Exam setup')
+            ->assertSee('Edit settings')
+            // The duration, pass mark and attempt count are on the page now,
+            // not hidden behind the edit form.
+            ->assertSee('45 min')
+            ->assertSee('Attempts')
+            // The delete control is an icon button; its label is the title.
+            ->assertSee('title="Delete exam"', false);
+    }
 }
+

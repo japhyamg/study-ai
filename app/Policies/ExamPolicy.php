@@ -41,7 +41,16 @@ class ExamPolicy
 
     public function delete(User $user, Exam $exam): bool
     {
-        return $this->isPlatformAdmin($user) && $this->inSchool($user, $exam->school_id);
+        if ($this->isPlatformAdmin($user)) {
+            return $this->inSchool($user, $exam->school_id);
+        }
+
+        // A teacher can remove an exam they set, which is the only way to clear
+        // up a mistaken draft. Whether it is safe to delete once students have
+        // sat it is a separate question, handled in the controller.
+        return $this->isTeacher($user)
+            && $exam->created_by === $user->id
+            && $exam->school_id === $user->currentSchool()?->id;
     }
 
     public function take(User $user, Exam $exam): bool
