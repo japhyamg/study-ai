@@ -814,85 +814,214 @@ class TeacherController extends Controller
 
     // ── Question bank (teacher) ──
     /**
-     * The teacher's question bank, scoped to the subjects they teach.
+     * The teacher's question bank.
      *
-     * The bank fills up on approval: every reviewed quiz question joins its
-     * subject's pool, so by the end of a term a teacher has everything they
-     * have had approved, grouped by the study guide it came from.
+     * Subject-first: a bank is a subject's accumulated work, and a flat list
+     * of several hundred questions across every subject is not something
+     * anyone reads. Landing on the subjects — with counts — makes the shape of
+     * the bank visible before you commit to opening one.
      */
     public function questionBankIndex(Request $request): View
     {
         $user = $request->user();
         $school = $this->school();
 
-        // Only the subjects this teacher is assigned to; admins see all.
-        $subjects = Subject::where('school_id', $school?->id)
-            ->when(! $user->isAdmin(), fn ($q) => $q->whereIn(
-                'id',
-                ClassSubjectAssignment::where('teacher_id', $user->id)->select('subject_id')
-            ))
-            ->orderBy('name')
-            ->get();
+        $subjects = $this->bankSubjects($user, $school?->id);
+
+        // One grouped count query rather than one per subject.
+        $counts = QuestionBank::query()
+            ->where('school_id', $school?->id)
+            ->forTeacher($user)
+            ->selectRaw('subject_id, COUNT(*) as total')
+            ->groupBy('subject_id')
+            ->pluck('total', 'subject_id');
+
+        return view('teacher.question-bank.index', [
+            'subjects' => $subjects,
+            'counts' => $counts,
+            'total' => (int) $counts->sum(),
+        ]);
+    }
+
+    /** One subject's questions, grouped by the study guide they came from. */
+    public function questionBankShow(Request $request, Subject $subject): View
+    {
+        $user = $request->user();
+        $school = $this->school();
+
+        abort_unless($this->canUseBankSubject($user, $subject->id, $school?->id), 403);
 
         $filters = $request->validate([
-            'subject' => 'nullable|string',
             'topic' => 'nullable|string',
             'q' => 'nullable|string|max:200',
         ]);
 
         $questions = QuestionBank::query()
             ->where('school_id', $school?->id)
-            ->forTeacher($user)
-            ->with('subject')
-            ->when($filters['subject'] ?? null, fn ($q, $id) => $q->where('subject_id', $id))
+            ->where('subject_id', $subject->id)
             ->when($filters['topic'] ?? null, fn ($q, $topic) => $q->where('topic', $topic))
             ->when($filters['q'] ?? null, fn ($q, $term) => $q->where('question', 'like', '%'.$term.'%'))
+            ->orderBy('topic')
             ->orderByDesc('created_at')
-            ->paginate(30)
+            ->paginate(25)
             ->withQueryString();
 
-        // Topic list for the filter, limited to what this teacher can see.
         $topics = QuestionBank::query()
             ->where('school_id', $school?->id)
-            ->forTeacher($user)
-            ->when($filters['subject'] ?? null, fn ($q, $id) => $q->where('subject_id', $id))
+            ->where('subject_id', $subject->id)
             ->whereNotNull('topic')
             ->distinct()
             ->orderBy('topic')
             ->pluck('topic');
 
-        return view('teacher.question-bank.index', compact('questions', 'subjects', 'topics', 'filters'));
+        return view('teacher.question-bank.show', [
+            'subject' => $subject,
+            'questions' => $questions,
+            'topics' => $topics,
+            'filters' => $filters,
+        ]);
+    }
+
+    /**
+     * Correct a banked question.
+     *
+     * What a question needs depends on its type, so validation branches on it:
+     * a multiple-choice question needs options and a correct one among them,
+     * while a written answer needs only the answer itself. Accepting options
+     * for a short-answer question would leave data the UI never shows and the
+     * grader never reads.
+     */
+    public function questionBankUpdate(Request $request, QuestionBank $qb): RedirectResponse
+    {
+        abort_unless($this->canUseBankSubject($request->user(), $qb->subject_id, $qb->school_id), 403);
+
+        $data = $request->validate([
+            'question' => 'required|string|max:2000',
+            'type' => 'required|in:mcq,true_false,fill_blank,short_answer,essay',
+            'options' => 'nullable|array|max:6',
+            'options.*' => 'nullable|string|max:1000',
+            'correct_idx' => 'nullable|integer|min:0',
+            'answer' => 'nullable|string|max:2000',
+            'explanation' => 'nullable|string|max:2000',
+            'difficulty' => 'nullable|integer|min:1|max:5',
+        ]);
+
+        $qb->update($this->bankAttributes($data));
+
+        return back()->with('status', 'Question updated.');
+    }
+
+    /**
+     * Normalise a submitted question into what the bank stores.
+     *
+     * The bank keeps the answer as text rather than an index into the options,
+     * so the correct choice has to be resolved here. That is deliberate:
+     * options can be reordered or edited later, and an index into a list that
+     * has since changed silently points at the wrong answer.
+     *
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    private function bankAttributes(array $data): array
+    {
+        $type = $data['type'];
+        $choiceBased = in_array($type, [QuestionBank::TYPE_MCQ, QuestionBank::TYPE_TRUE_FALSE], true);
+
+        if (! $choiceBased) {
+            // Written answers have nothing to choose between.
+            if (trim((string) ($data['answer'] ?? '')) === '') {
+                throw ValidationException::withMessages([
+                    'answer' => 'Give the answer you expect.',
+                ]);
+            }
+
+            return [
+                'question' => $data['question'],
+                'type' => $type,
+                'options' => null,
+                'answer' => trim($data['answer']),
+                'explanation' => $data['explanation'] ?? null,
+                'difficulty' => $data['difficulty'] ?? 1,
+            ];
+        }
+
+        $options = array_values(array_filter(
+            array_map(static fn ($o) => trim((string) $o), $data['options'] ?? []),
+            static fn ($o) => $o !== ''
+        ));
+
+        if ($type === QuestionBank::TYPE_TRUE_FALSE) {
+            $options = ['True', 'False'];
+        }
+
+        if (count($options) < 2) {
+            throw ValidationException::withMessages([
+                'options' => 'A choice question needs at least two options.',
+            ]);
+        }
+
+        $index = (int) ($data['correct_idx'] ?? 0);
+
+        if (! array_key_exists($index, $options)) {
+            throw ValidationException::withMessages([
+                'correct_idx' => 'Mark one of the options as the correct answer.',
+            ]);
+        }
+
+        return [
+            'question' => $data['question'],
+            'type' => $type,
+            'options' => $options,
+            'answer' => $options[$index],
+            'explanation' => $data['explanation'] ?? null,
+            'difficulty' => $data['difficulty'] ?? 1,
+        ];
+    }
+
+    /** Subjects whose bank this user may open. */
+    private function bankSubjects(User $user, ?string $schoolId)
+    {
+        return Subject::where('school_id', $schoolId)
+            ->when(! $user->isAdmin(), fn ($q) => $q->whereIn(
+                'id',
+                ClassSubjectAssignment::where('teacher_id', $user->id)->select('subject_id')
+            ))
+            ->orderBy('name')
+            ->get();
     }
 
     public function questionBankStore(Request $request): RedirectResponse
     {
         $school = $this->school();
+
         $data = $request->validate([
-            'question' => 'required|string',
+            // Required: a bank belongs to a subject, and a question filed
+            // under nothing is invisible everywhere it would be used.
+            'subject_id' => 'required|exists:subjects,id',
+            'question' => 'required|string|max:2000',
             'type' => 'required|in:mcq,true_false,fill_blank,short_answer,essay',
-            'options' => 'nullable|array',
-            'answer' => 'required|string',
-            'explanation' => 'nullable|string',
+            'options' => 'nullable|array|max:6',
+            'options.*' => 'nullable|string|max:1000',
+            'correct_idx' => 'nullable|integer|min:0',
+            'answer' => 'nullable|string|max:2000',
+            'explanation' => 'nullable|string|max:2000',
             'difficulty' => 'nullable|integer|min:1|max:5',
-            'subject_id' => 'nullable|exists:subjects,id',
         ]);
+
         abort_unless(
-            $this->canUseBankSubject($request->user(), $data['subject_id'] ?? null, $school?->id),
+            $this->canUseBankSubject($request->user(), $data['subject_id'], $school?->id),
             403
         );
 
-        QuestionBank::create([
+        // Shared with the editor, so a hand-written question is shaped exactly
+        // like one that arrived from an approved quiz.
+        QuestionBank::create($this->bankAttributes($data) + [
             'school_id' => $school?->id,
-            'subject_id' => $data['subject_id'] ?? null,
-            'question' => $data['question'],
-            'type' => $data['type'],
-            'options' => $data['options'] ?? null,
-            'answer' => $data['answer'],
-            'explanation' => $data['explanation'] ?? null,
-            'difficulty' => $data['difficulty'] ?? 1,
-            'created_by' => auth()->id(),
+            'subject_id' => $data['subject_id'],
+            'created_by' => $request->user()->id,
         ]);
-        return back()->with('status', 'Question added to bank.');
+
+        return back()->with('status', 'Question added to the bank.');
     }
 
     public function questionBankDestroy(Request $request, QuestionBank $qb): RedirectResponse

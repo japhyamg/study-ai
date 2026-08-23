@@ -261,35 +261,175 @@ class QuestionBankTest extends TestCase
 
     // ───────────────────────── who can see a bank ─────────────────────────
 
-    public function test_a_teacher_sees_their_own_subjects_questions(): void
+    public function test_the_index_lists_only_the_teachers_own_subjects(): void
+    {
+        $this->actingAs($this->mathsTeacher)
+            ->get(route('teacher.question-bank.index'))
+            ->assertOk()
+            ->assertSee('Maths')
+            ->assertDontSee('Chemistry');
+    }
+
+    public function test_the_index_counts_the_questions_in_each_subject(): void
     {
         $this->approve($this->material($this->maths, $this->mathsTeacher));
 
         $this->actingAs($this->mathsTeacher)
             ->get(route('teacher.question-bank.index'))
             ->assertOk()
+            // The count sits in its own span, so assert the pieces.
+            ->assertSee('>2<', false)
+            ->assertSee('questions');
+    }
+
+    public function test_a_teacher_sees_their_own_subjects_questions(): void
+    {
+        $this->approve($this->material($this->maths, $this->mathsTeacher));
+
+        $this->actingAs($this->mathsTeacher)
+            ->get(route('teacher.question-bank.show', $this->maths))
+            ->assertOk()
             ->assertSee('discriminant');
     }
 
     /** The access rule that makes a bank a subject's own. */
-    public function test_a_teacher_cannot_see_another_subjects_questions(): void
+    public function test_a_teacher_cannot_open_another_subjects_bank(): void
     {
         $this->approve($this->material($this->maths, $this->mathsTeacher));
 
         $this->actingAs($this->chemistryTeacher)
-            ->get(route('teacher.question-bank.index'))
-            ->assertOk()
-            ->assertDontSee('discriminant');
+            ->get(route('teacher.question-bank.show', $this->maths))
+            ->assertForbidden();
     }
 
-    public function test_an_admin_sees_every_subject(): void
+    public function test_an_admin_can_open_any_subjects_bank(): void
     {
         $this->approve($this->material($this->maths, $this->mathsTeacher));
 
         $this->actingAs($this->admin)
-            ->get(route('teacher.question-bank.index'))
+            ->get(route('teacher.question-bank.show', $this->maths))
             ->assertOk()
             ->assertSee('discriminant');
+    }
+
+    public function test_questions_are_grouped_by_the_guide_they_came_from(): void
+    {
+        $this->approve($this->material($this->maths, $this->mathsTeacher, 'Quadratic Equations'));
+        $this->approve($this->material($this->maths, $this->mathsTeacher, 'Trigonometry'));
+
+        $this->actingAs($this->mathsTeacher)
+            ->get(route('teacher.question-bank.show', $this->maths))
+            ->assertOk()
+            ->assertSee('Quadratic Equations')
+            ->assertSee('Trigonometry');
+    }
+
+    // ───────────────────────── editing ─────────────────────────
+
+    public function test_a_teacher_can_correct_a_choice_question(): void
+    {
+        $this->approve($this->material($this->maths, $this->mathsTeacher));
+        $banked = QuestionBank::where('question', 'like', '%discriminant%')->first();
+
+        $this->actingAs($this->mathsTeacher)
+            ->put(route('teacher.question-bank.update', $banked), [
+                'question' => 'Corrected question?',
+                'type' => 'mcq',
+                'options' => ['wrong', 'right', 'also wrong'],
+                'correct_idx' => 1,
+                'difficulty' => 4,
+            ]);
+
+        $fresh = $banked->fresh();
+
+        $this->assertSame('Corrected question?', $fresh->question);
+        // Stored as text, resolved from the index that was submitted.
+        $this->assertSame('right', $fresh->answer);
+        $this->assertSame(4, $fresh->difficulty);
+    }
+
+    /** The key must never point past the options it was submitted with. */
+    public function test_the_correct_option_must_exist(): void
+    {
+        $this->approve($this->material($this->maths, $this->mathsTeacher));
+        $banked = QuestionBank::first();
+
+        $this->actingAs($this->mathsTeacher)
+            ->put(route('teacher.question-bank.update', $banked), [
+                'question' => 'Q',
+                'type' => 'mcq',
+                'options' => ['a', 'b'],
+                'correct_idx' => 5,
+            ])
+            ->assertSessionHasErrors('correct_idx');
+    }
+
+    public function test_switching_to_a_written_type_clears_the_options(): void
+    {
+        $this->approve($this->material($this->maths, $this->mathsTeacher));
+        $banked = QuestionBank::first();
+
+        $this->actingAs($this->mathsTeacher)
+            ->put(route('teacher.question-bank.update', $banked), [
+                'question' => 'Explain the discriminant.',
+                'type' => 'short_answer',
+                'answer' => 'It determines the number of real roots.',
+            ]);
+
+        $fresh = $banked->fresh();
+
+        $this->assertNull($fresh->options);
+        $this->assertSame('It determines the number of real roots.', $fresh->answer);
+    }
+
+    public function test_a_written_question_needs_an_answer(): void
+    {
+        $this->approve($this->material($this->maths, $this->mathsTeacher));
+        $banked = QuestionBank::first();
+
+        $this->actingAs($this->mathsTeacher)
+            ->put(route('teacher.question-bank.update', $banked), [
+                'question' => 'Q',
+                'type' => 'short_answer',
+                'answer' => '   ',
+            ])
+            ->assertSessionHasErrors('answer');
+    }
+
+    public function test_true_false_is_normalised_to_two_options(): void
+    {
+        $this->approve($this->material($this->maths, $this->mathsTeacher));
+        $banked = QuestionBank::first();
+
+        $this->actingAs($this->mathsTeacher)
+            ->put(route('teacher.question-bank.update', $banked), [
+                'question' => 'A quadratic has two roots.',
+                'type' => 'true_false',
+                'options' => ['anything', 'at', 'all'],
+                'correct_idx' => 0,
+            ]);
+
+        $fresh = $banked->fresh();
+
+        $this->assertSame(['True', 'False'], $fresh->options);
+        $this->assertSame('True', $fresh->answer);
+    }
+
+    public function test_a_teacher_cannot_edit_another_subjects_question(): void
+    {
+        $this->approve($this->material($this->maths, $this->mathsTeacher));
+        $banked = QuestionBank::first();
+
+        $this->actingAs($this->chemistryTeacher)
+            ->put(route('teacher.question-bank.update', $banked), [
+                'question' => 'Hijacked',
+                'type' => 'mcq',
+                'options' => ['a', 'b'],
+                'correct_idx' => 0,
+            ])
+            ->assertForbidden();
+
+        $this->assertNotSame('Hijacked', $banked->fresh()->question);
     }
 
     public function test_a_teacher_cannot_delete_another_subjects_question(): void

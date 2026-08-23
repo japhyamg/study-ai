@@ -196,7 +196,9 @@ Route::middleware(['auth', 'school.user', '2fa', 'role:teacher,admin'])
         Route::delete('questions/{question}', [TeacherController::class, 'destroyQuestion'])->name('questions.destroy');
 
         Route::get('question-bank', [TeacherController::class, 'questionBankIndex'])->name('question-bank.index');
+        Route::get('question-bank/{subject}', [TeacherController::class, 'questionBankShow'])->name('question-bank.show');
         Route::post('question-bank', [TeacherController::class, 'questionBankStore'])->name('question-bank.store');
+        Route::put('question-bank/{qb}', [TeacherController::class, 'questionBankUpdate'])->name('question-bank.update');
         Route::delete('question-bank/{qb}', [TeacherController::class, 'questionBankDestroy'])->name('question-bank.destroy');
     });
 
