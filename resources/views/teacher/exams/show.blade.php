@@ -24,7 +24,9 @@
         @else
             <form method="POST" action="{{ route('teacher.exams.publish', $exam) }}" class="inline">
                 @csrf @method('PUT')
-                <x-ui.button type="submit" size="sm" @disabled($questions->isEmpty())>Publish</x-ui.button>
+                {{-- :disabled as a bound attribute, not @disabled: directives
+                     inside a component tag are not compiled. --}}
+                <x-ui.button type="submit" size="sm" :disabled="$questions->isEmpty()">Publish</x-ui.button>
             </form>
         @endif
     </x-slot:actions>
