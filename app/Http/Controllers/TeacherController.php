@@ -19,6 +19,7 @@ use App\Models\Subject;
 use App\Models\Term;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
 class TeacherController extends Controller
@@ -594,12 +595,50 @@ class TeacherController extends Controller
         return redirect()->route('teacher.materials.index')->with('status', 'Material deleted.');
     }
 
-    // ── Flashcard inline edit/delete (from tabbed material detail) ──
+    // ── Flashcard add/edit/delete (from tabbed material detail) ──
+
+    /**
+     * Add a card by hand.
+     *
+     * Generated content is a starting point, not the finished article — a
+     * teacher reviewing it will spot gaps the model missed, and should be able
+     * to fill them before sending the material on.
+     */
+    public function storeFlashcard(Request $request, Material $material): RedirectResponse
+    {
+        // Authorising against the material, not the card: permission to add
+        // comes from owning the material it belongs to.
+        $this->authorize('update', $material);
+
+        $data = $request->validate([
+            'front' => 'required|string|max:2000',
+            'back' => 'required|string|max:5000',
+        ]);
+
+        $material->flashcards()->create([
+            'user_id' => $material->created_by,
+            'front' => $data['front'],
+            'back' => $data['back'],
+            'tags' => [],
+            'review_status' => Material::REVIEW_PENDING,
+            // Same SM-2 starting position as a generated card, so a
+            // hand-written one is scheduled identically.
+            'ease_factor' => 2.5,
+            'interval' => 0,
+            'repetitions' => 0,
+            'lapses' => 0,
+            'due_date' => now(),
+        ]);
+
+        return back()->with('status', 'Flashcard added.');
+    }
+
     public function updateFlashcard(Request $request, Flashcard $flashcard): RedirectResponse
     {
         $this->authorize('update', $flashcard);
         $data = $request->validate([
-            'front' => 'required|string', 'back' => 'required|string',
+            'front' => 'required|string|max:2000',
+            'back' => 'required|string|max:5000',
         ]);
         $flashcard->update($data);
         return back()->with('status', 'Flashcard updated.');
@@ -612,18 +651,70 @@ class TeacherController extends Controller
         return back()->with('status', 'Flashcard deleted.');
     }
 
-    // ── Question edit/delete (from tabbed material detail) ──
+    // ── Question add/edit/delete (from tabbed material detail) ──
+
+    public function storeQuestion(Request $request, Material $material): RedirectResponse
+    {
+        $this->authorize('update', $material);
+
+        $data = $this->validateQuestion($request);
+
+        $material->questions()->create($data + ['review_status' => Material::REVIEW_PENDING]);
+
+        return back()->with('status', 'Question added.');
+    }
+
     public function updateQuestion(Request $request, Question $question): RedirectResponse
     {
         $this->authorize('update', $question);
-        $data = $request->validate([
-            'question' => 'required|string',
-            'options' => 'nullable|array',
-            'correct_idx' => 'nullable|integer',
-            'explanation' => 'nullable|string',
-        ]);
-        $question->update($data);
+
+        $question->update($this->validateQuestion($request));
+
         return back()->with('status', 'Question updated.');
+    }
+
+    /**
+     * Shared validation for adding and editing a question.
+     *
+     * `correct_idx` has to be checked against the options actually submitted —
+     * a bare `integer` rule would happily store an index pointing past the end
+     * of the list, which reads as "no correct answer" everywhere downstream.
+     *
+     * @return array<string, mixed>
+     */
+    private function validateQuestion(Request $request): array
+    {
+        $data = $request->validate([
+            'question' => 'required|string|max:2000',
+            'type' => 'nullable|in:multiple-choice,true-false,fill-blank,short-answer',
+            'options' => 'required|array|min:1|max:6',
+            'options.*' => 'required|string|max:1000',
+            'correct_idx' => 'required|integer|min:0',
+            'explanation' => 'nullable|string|max:2000',
+            'difficulty' => 'nullable|integer|min:1|max:5',
+        ]);
+
+        $options = array_values($data['options']);
+        $type = $data['type'] ?? 'multiple-choice';
+
+        // A written answer has no options to choose between: the single entry
+        // is the model answer, so the index can only be 0.
+        $correct = $type === 'short-answer' ? 0 : (int) $data['correct_idx'];
+
+        if ($correct >= count($options)) {
+            throw ValidationException::withMessages([
+                'correct_idx' => 'Mark one of the options as the correct answer.',
+            ]);
+        }
+
+        return [
+            'question' => $data['question'],
+            'type' => $type,
+            'options' => $options,
+            'correct_idx' => $correct,
+            'explanation' => $data['explanation'] ?? null,
+            'difficulty' => $data['difficulty'] ?? 1,
+        ];
     }
 
     public function destroyQuestion(Question $question): RedirectResponse

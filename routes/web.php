@@ -187,8 +187,10 @@ Route::middleware(['auth', 'school.user', '2fa', 'role:teacher,admin'])
         Route::put('materials/{material}/approve', [TeacherController::class, 'approveMaterial'])->name('materials.approve');
         Route::put('materials/{material}/reject', [TeacherController::class, 'rejectMaterial'])->name('materials.reject');
 
+        Route::post('materials/{material}/flashcards', [TeacherController::class, 'storeFlashcard'])->name('flashcards.store');
         Route::put('flashcards/{flashcard}', [TeacherController::class, 'updateFlashcard'])->name('flashcards.update');
         Route::delete('flashcards/{flashcard}', [TeacherController::class, 'destroyFlashcard'])->name('flashcards.destroy');
+        Route::post('materials/{material}/questions', [TeacherController::class, 'storeQuestion'])->name('questions.store');
         Route::put('questions/{question}', [TeacherController::class, 'updateQuestion'])->name('questions.update');
         Route::delete('questions/{question}', [TeacherController::class, 'destroyQuestion'])->name('questions.destroy');
 

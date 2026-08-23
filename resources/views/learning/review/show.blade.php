@@ -234,96 +234,246 @@
 
             {{-- ─────────── Flashcards ─────────── --}}
             <div x-show="tab === 'flashcards'" @style(['display: none' => $tab !== 'flashcards'])>
-                @if ($material->flashcards->isEmpty())
-                    <x-ui.empty icon="layers" title="No flashcards" message="None have been generated yet." />
-                @else
-                    <div x-data="{ mode: 'list' }">
+                <div x-data="{ mode: 'list', adding: false }">
+                    @if ($material->flashcards->isNotEmpty())
                         {{-- A reviewer needs to scan every card to approve it,
                              so the list stays the default; the deck is for
                              checking how it will actually read. --}}
-                        <div class="mb-4 flex gap-1">
-                            <button type="button" class="tab-btn" :class="mode === 'list' && 'active'"
-                                    @click="mode = 'list'">All cards</button>
-                            <button type="button" class="tab-btn" :class="mode === 'deck' && 'active'"
-                                    @click="mode = 'deck'">Review deck</button>
+                        <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+                            <div class="flex gap-1">
+                                <button type="button" class="tab-btn" :class="mode === 'list' && 'active'"
+                                        @click="mode = 'list'">All cards</button>
+                                <button type="button" class="tab-btn" :class="mode === 'deck' && 'active'"
+                                        @click="mode = 'deck'">Review deck</button>
+                            </div>
+
+                            @if ($canEdit)
+                                <button type="button" class="btn btn-outline btn-sm"
+                                        x-show="mode === 'list' && ! adding" @click="adding = true">
+                                    <x-icon name="plus" /> Add card
+                                </button>
+                            @endif
                         </div>
 
                         <div x-show="mode === 'deck'" x-cloak>
                             <x-flashcard-deck :cards="$material->flashcards" />
                         </div>
-
-                        <div x-show="mode === 'list'" class="grid gap-3 sm:grid-cols-2">
-                        @foreach ($material->flashcards as $index => $card)
-                            <div class="surface p-4">
-                                <div class="mb-2 text-xs text-faint">Card {{ $index + 1 }}</div>
-                                <div class="text-sm font-medium text-ink">{{ $card->front }}</div>
-                                <div class="mt-2 border-t border-line pt-2 text-sm text-muted">{{ $card->back }}</div>
-                                @if ($card->tags)
-                                    <div class="mt-2 flex flex-wrap gap-1">
-                                        @foreach ($card->tags as $tag)
-                                            <span class="badge">{{ $tag }}</span>
-                                        @endforeach
-                                    </div>
-                                @endif
-                            </div>
-                        @endforeach
+                    @elseif ($canEdit)
+                        <div class="mb-4 flex justify-end">
+                            <button type="button" class="btn btn-outline btn-sm"
+                                    x-show="! adding" @click="adding = true">
+                                <x-icon name="plus" /> Add card
+                            </button>
                         </div>
+                    @endif
+
+                    <div x-show="mode === 'list'">
+                        @if ($canEdit)
+                            {{-- New card form, hidden until asked for so it does
+                                 not compete with the content already there. --}}
+                            <form method="POST" action="{{ route('teacher.flashcards.store', $material) }}"
+                                  class="surface mb-3 p-4" x-show="adding" x-cloak>
+                                @csrf
+                                <p class="text-sm font-medium text-ink">New flashcard</p>
+                                <div class="mt-3 grid gap-3 sm:grid-cols-2">
+                                    <x-ui.field label="Front" name="front" required>
+                                        <textarea name="front" rows="3" class="textarea" required
+                                                  placeholder="The question or prompt"></textarea>
+                                    </x-ui.field>
+                                    <x-ui.field label="Back" name="back" required>
+                                        <textarea name="back" rows="3" class="textarea" required
+                                                  placeholder="The answer"></textarea>
+                                    </x-ui.field>
+                                </div>
+                                <div class="mt-3 flex justify-end gap-2">
+                                    <button type="button" class="btn btn-ghost btn-sm" @click="adding = false">Cancel</button>
+                                    <button type="submit" class="btn btn-primary btn-sm">Add card</button>
+                                </div>
+                            </form>
+                        @endif
+
+                        @if ($material->flashcards->isEmpty())
+                            <x-ui.empty icon="layers" title="No flashcards"
+                                        message="None have been generated yet." />
+                        @else
+                            <div class="grid gap-3 sm:grid-cols-2">
+                                @foreach ($material->flashcards as $index => $card)
+                                    <div class="surface p-4" x-data="{ editing: false }">
+                                        {{-- Read view --}}
+                                        <div x-show="! editing">
+                                            <div class="flex items-start justify-between gap-2">
+                                                <span class="text-xs text-faint">Card {{ $index + 1 }}</span>
+                                                @if ($canEdit)
+                                                    <div class="flex shrink-0 gap-1">
+                                                        <button type="button" class="btn-icon" title="Edit card"
+                                                                @click="editing = true">
+                                                            <x-icon name="pencil" />
+                                                        </button>
+                                                        <form method="POST"
+                                                              action="{{ route('teacher.flashcards.destroy', $card) }}"
+                                                              @submit.prevent="confirm('Delete this flashcard?') && $el.submit()">
+                                                            @csrf
+                                                            @method('DELETE')
+                                                            <button type="submit" class="btn-icon text-danger" title="Delete card">
+                                                                <x-icon name="trash" />
+                                                            </button>
+                                                        </form>
+                                                    </div>
+                                                @endif
+                                            </div>
+                                            <div class="mt-1 text-sm font-medium text-ink">{{ $card->front }}</div>
+                                            <div class="mt-2 border-t border-line pt-2 text-sm text-muted">{{ $card->back }}</div>
+                                            @if ($card->tags)
+                                                <div class="mt-2 flex flex-wrap gap-1">
+                                                    @foreach ($card->tags as $tag)
+                                                        <span class="badge">{{ $tag }}</span>
+                                                    @endforeach
+                                                </div>
+                                            @endif
+                                        </div>
+
+                                        {{-- Edit view --}}
+                                        @if ($canEdit)
+                                            <form method="POST" action="{{ route('teacher.flashcards.update', $card) }}"
+                                                  x-show="editing" x-cloak>
+                                                @csrf
+                                                @method('PUT')
+                                                <x-ui.field label="Front" name="front" required>
+                                                    <textarea name="front" rows="3" class="textarea" required>{{ $card->front }}</textarea>
+                                                </x-ui.field>
+                                                <div class="mt-2">
+                                                    <x-ui.field label="Back" name="back" required>
+                                                        <textarea name="back" rows="4" class="textarea" required>{{ $card->back }}</textarea>
+                                                    </x-ui.field>
+                                                </div>
+                                                <div class="mt-3 flex justify-end gap-2">
+                                                    <button type="button" class="btn btn-ghost btn-sm" @click="editing = false">Cancel</button>
+                                                    <button type="submit" class="btn btn-primary btn-sm">Save</button>
+                                                </div>
+                                            </form>
+                                        @endif
+                                    </div>
+                                @endforeach
+                            </div>
+                        @endif
                     </div>
-                @endif
+                </div>
             </div>
 
             {{-- ─────────── Quiz ─────────── --}}
             <div x-show="tab === 'quiz'" @style(['display: none' => $tab !== 'quiz'])>
-                @if ($material->questions->isEmpty())
-                    <x-ui.empty icon="clipboard" title="No quiz" message="No questions have been generated yet." />
-                @else
-                    <div x-data="{ mode: 'list' }">
+                <div x-data="{ mode: 'list', adding: false }" @cancel-question-edit.stop="adding = false">
+                    @if ($material->questions->isNotEmpty())
                         {{-- Same split as the flashcards: the answer key is what
                              a reviewer needs, but running the quiz is the only
                              way to catch a question that does not work. --}}
-                        <div class="mb-4 flex gap-1">
-                            <button type="button" class="tab-btn" :class="mode === 'list' && 'active'"
-                                    @click="mode = 'list'">Answer key</button>
-                            <button type="button" class="tab-btn" :class="mode === 'quiz' && 'active'"
-                                    @click="mode = 'quiz'">Try the quiz</button>
+                        <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+                            <div class="flex gap-1">
+                                <button type="button" class="tab-btn" :class="mode === 'list' && 'active'"
+                                        @click="mode = 'list'">Answer key</button>
+                                <button type="button" class="tab-btn" :class="mode === 'quiz' && 'active'"
+                                        @click="mode = 'quiz'">Try the quiz</button>
+                            </div>
+
+                            @if ($canEdit)
+                                <button type="button" class="btn btn-outline btn-sm"
+                                        x-show="mode === 'list' && ! adding" @click="adding = true">
+                                    <x-icon name="plus" /> Add question
+                                </button>
+                            @endif
                         </div>
 
                         <div x-show="mode === 'quiz'" x-cloak>
                             <x-quiz :questions="$material->questions" />
                         </div>
+                    @elseif ($canEdit)
+                        <div class="mb-4 flex justify-end">
+                            <button type="button" class="btn btn-outline btn-sm"
+                                    x-show="! adding" @click="adding = true">
+                                <x-icon name="plus" /> Add question
+                            </button>
+                        </div>
+                    @endif
 
-                        <ol x-show="mode === 'list'" class="space-y-3">
-                        @foreach ($material->questions as $i => $question)
-                            <li class="surface p-4">
-                                <div class="flex gap-3">
-                                    <span class="tnum flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-surface-sunk text-xs text-muted">
-                                        {{ $i + 1 }}
-                                    </span>
-                                    <div class="min-w-0 flex-1">
-                                        <div class="text-sm font-medium text-ink">{{ $question->question }}</div>
+                    <div x-show="mode === 'list'">
+                        @if ($canEdit)
+                            <div class="surface mb-3 p-4" x-show="adding" x-cloak>
+                                <x-question-editor :action="route('teacher.questions.store', $material)" />
+                            </div>
+                        @endif
 
-                                        <ul class="mt-2 space-y-1">
-                                            @foreach ((array) $question->options as $index => $option)
-                                                @php $isCorrect = $index === $question->correct_idx; @endphp
-                                                <li class="flex items-start gap-2 text-sm {{ $isCorrect ? 'font-medium text-success' : 'text-muted' }}">
-                                                    <span class="w-4 shrink-0 text-xs">{{ $isCorrect ? '✓' : chr(65 + $index) }}</span>
-                                                    <span>{{ $option }}</span>
-                                                </li>
-                                            @endforeach
-                                        </ul>
+                        @if ($material->questions->isEmpty())
+                            <x-ui.empty icon="clipboard" title="No quiz"
+                                        message="No questions have been generated yet." />
+                        @else
+                            <ol class="space-y-3">
+                                @foreach ($material->questions as $i => $question)
+                                    <li class="surface p-4" x-data="{ editing: false }"
+                                        @cancel-question-edit.stop="editing = false">
+                                        {{-- Read view --}}
+                                        <div class="flex gap-3" x-show="! editing">
+                                            <span class="tnum flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-surface-sunk text-xs text-muted">
+                                                {{ $i + 1 }}
+                                            </span>
+                                            <div class="min-w-0 flex-1">
+                                                <div class="flex items-start justify-between gap-2">
+                                                    <div class="text-sm font-medium text-ink">{{ $question->question }}</div>
+                                                    @if ($canEdit)
+                                                        <div class="flex shrink-0 gap-1">
+                                                            <button type="button" class="btn-icon" title="Edit question"
+                                                                    @click="editing = true">
+                                                                <x-icon name="pencil" />
+                                                            </button>
+                                                            <form method="POST"
+                                                                  action="{{ route('teacher.questions.destroy', $question) }}"
+                                                                  @submit.prevent="confirm('Delete this question?') && $el.submit()">
+                                                                @csrf
+                                                                @method('DELETE')
+                                                                <button type="submit" class="btn-icon text-danger" title="Delete question">
+                                                                    <x-icon name="trash" />
+                                                                </button>
+                                                            </form>
+                                                        </div>
+                                                    @endif
+                                                </div>
 
-                                        @if ($question->explanation)
-                                            <p class="mt-2 border-t border-line pt-2 text-xs text-faint">
-                                                {{ $question->explanation }}
-                                            </p>
+                                                <div class="mt-1 flex flex-wrap gap-1">
+                                                    <span class="badge">{{ Str::headline($question->type ?? 'multiple-choice') }}</span>
+                                                    <span class="badge">Difficulty {{ $question->difficulty ?: 1 }}/5</span>
+                                                </div>
+
+                                                <ul class="mt-2 space-y-1">
+                                                    @foreach ((array) $question->options as $index => $option)
+                                                        @php $isCorrect = $index === $question->correct_idx; @endphp
+                                                        <li class="flex items-start gap-2 text-sm {{ $isCorrect ? 'font-medium text-success' : 'text-muted' }}">
+                                                            <span class="w-4 shrink-0 text-xs">{{ $isCorrect ? '✓' : chr(65 + $index) }}</span>
+                                                            <span>{{ $option }}</span>
+                                                        </li>
+                                                    @endforeach
+                                                </ul>
+
+                                                @if ($question->explanation)
+                                                    <p class="mt-2 border-t border-line pt-2 text-xs text-faint">
+                                                        {{ $question->explanation }}
+                                                    </p>
+                                                @endif
+                                            </div>
+                                        </div>
+
+                                        {{-- Edit view --}}
+                                        @if ($canEdit)
+                                            <div x-show="editing" x-cloak>
+                                                <x-question-editor :action="route('teacher.questions.update', $question)"
+                                                                   :question="$question"
+                                                                   method="PUT" />
+                                            </div>
                                         @endif
-                                    </div>
-                                </div>
-                            </li>
-                        @endforeach
-                        </ol>
+                                    </li>
+                                @endforeach
+                            </ol>
+                        @endif
                     </div>
-                @endif
+                </div>
             </div>
 
             {{-- ─────────── Source ─────────── --}}
