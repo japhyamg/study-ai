@@ -93,6 +93,7 @@ class MaterialDeletionTest extends TestCase
             'subject_id' => $this->subject->id,
             'created_by' => ($creator ?? $this->owner)->id,
             'title' => 'Algebra Basics',
+            'type' => 'note',
             'content' => 'Some substantive lesson content for the guide.',
             'workflow_state' => $state,
         ]);

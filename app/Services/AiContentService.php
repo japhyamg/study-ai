@@ -71,7 +71,11 @@ class AiContentService
             return;
         }
 
-        $context = ['userId' => $job->created_by, 'schoolId' => $job->school_id];
+        $context = [
+            'userId' => $job->created_by,
+            'schoolId' => $job->school_id,
+            'materialId' => $material->id,
+        ];
         $options = $job->result ?? [];
         $result = ['types' => []];
 

@@ -26,7 +26,7 @@ class AiService
     private const SYSTEM_PROMPT = 'You are an expert educational content creator. Source material arrives as compact JSON — an array of sections, each with an optional heading "h" and its text "t". Treat it as one continuous document and use the headings to understand its structure. Return ONLY valid JSON — no markdown, no backticks, no extra text. For math/science: use proper Unicode symbols (≤, ≥, ≠, ≈, ±, ∞, →, ∈, ⊂, ∪, ∩, ∫, ∑, √, ∂, ∇, Δ, θ, λ, μ, π, σ, ω, α, β, γ, ², ³, ⁰, ₁, ₂, ₃, ⁴, ⁵, ⁶, ⁷, ⁸, ⁹). Write fractions as a/b, exponents as x², derivatives as dy/dx, integrals as ∫f(x)dx. Show step-by-step solutions with numbered steps. Include units (m/s², mol⁻¹).';
 
     /**
-     * @param  array  $context  ['userId'=>?, 'schoolId'=>?]
+     * @param  array  $context  ['userId'=>?, 'schoolId'=>?, 'materialId'=>?]
      * @param  string  $generationType  selects the token ceiling in config/ai.php
      * @return mixed decoded JSON (array/object)
      *
@@ -482,6 +482,9 @@ SOURCE (JSON: sections[] with h = heading, t = text):
                 'model' => $model,
                 'user_id' => $context['userId'] ?? null,
                 'school_id' => $context['schoolId'] ?? null,
+                // Lets a teacher see what their allowance went on, not just
+                // that it went.
+                'material_id' => $context['materialId'] ?? null,
                 'prompt_tokens' => $promptTokens,
                 'completion_tokens' => $completionTokens,
                 'total_tokens' => $promptTokens + $completionTokens,

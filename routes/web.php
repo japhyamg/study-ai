@@ -160,6 +160,7 @@ Route::middleware(['auth', 'school.user', '2fa', 'role:teacher,admin'])
     ->prefix('teacher')->name('teacher.')->group(function () {
         Route::get('dashboard', [TeacherController::class, 'dashboard'])->name('dashboard');
         Route::get('classes', [TeacherController::class, 'teacherClasses'])->name('classes.index');
+        Route::get('ai-usage', [TeacherController::class, 'tokenUsage'])->name('token-usage');
         Route::get('classes/{class}', [TeacherController::class, 'teacherClassShow'])->name('classes.show');
 
         Route::get('exams', [TeacherController::class, 'exams'])->name('exams.index');

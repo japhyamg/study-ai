@@ -17,6 +17,9 @@ use App\Models\SchoolMember;
 use App\Models\StudyGuide;
 use App\Models\Subject;
 use App\Models\Term;
+use App\Models\TokenUsage;
+use App\Services\TokenLimitService;
+use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
@@ -722,6 +725,70 @@ class TeacherController extends Controller
         $this->authorize('delete', $question);
         $question->delete();
         return back()->with('status', 'Question deleted.');
+    }
+
+    /**
+     * The teacher's own AI allowance and what it has been spent on.
+     *
+     * The allowance is a calendar-month window: TokenLimitService measures
+     * usage from startOfMonth(), so it resets on the 1st without anything
+     * needing to run. Nothing is "reset" — the query window simply moves.
+     *
+     * A bare total is not actionable, so spend is grouped by material. A
+     * teacher who has burned their month on one document can see that, and a
+     * regenerate that cost more than the original run is visible rather than
+     * mysterious.
+     */
+    public function tokenUsage(Request $request): View
+    {
+        $user = $request->user();
+        $limits = app(TokenLimitService::class)->getTeacherTokenLimit($user->id);
+
+        $since = now()->startOfMonth();
+
+        // Grouped in SQL rather than by loading every row: a busy month is
+        // thousands of records and the page only needs the rollup.
+        $byMaterial = TokenUsage::query()
+            ->selectRaw('material_id, SUM(total_tokens) as tokens, SUM(cost) as cost, COUNT(*) as runs, MAX(created_at) as last_used')
+            ->where('user_id', $user->id)
+            ->where('created_at', '>=', $since)
+            ->groupBy('material_id')
+            ->orderByDesc('tokens')
+            ->get();
+
+        $materials = Material::whereIn('id', $byMaterial->pluck('material_id')->filter())
+            ->get(['id', 'title'])
+            ->keyBy('id');
+
+        $rows = $byMaterial->map(fn ($row) => [
+            'material' => $row->material_id ? $materials->get($row->material_id) : null,
+            'tokens' => (int) $row->tokens,
+            'cost' => (float) $row->cost,
+            'runs' => (int) $row->runs,
+            'lastUsed' => $row->last_used ? Carbon::parse($row->last_used) : null,
+        ]);
+
+        $byOperation = TokenUsage::query()
+            ->selectRaw('operation, SUM(total_tokens) as tokens, COUNT(*) as runs')
+            ->where('user_id', $user->id)
+            ->where('created_at', '>=', $since)
+            ->groupBy('operation')
+            ->orderByDesc('tokens')
+            ->get()
+            ->map(fn ($row) => [
+                'operation' => (string) $row->operation,
+                'tokens' => (int) $row->tokens,
+                'runs' => (int) $row->runs,
+            ]);
+
+        return view('teacher.token-usage', [
+            'limits' => $limits,
+            'rows' => $rows,
+            'byOperation' => $byOperation,
+            'since' => $since,
+            'resetsOn' => now()->addMonthNoOverflow()->startOfMonth(),
+            'totalCost' => (float) $rows->sum('cost'),
+        ]);
     }
 
     // ── Exam analytics (teacher) ──

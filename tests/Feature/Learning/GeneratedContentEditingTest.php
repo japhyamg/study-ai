@@ -69,6 +69,7 @@ class GeneratedContentEditingTest extends TestCase
             'subject_id' => $subject->id,
             'created_by' => $this->owner->id,
             'title' => 'Algebra',
+            'type' => 'note',
             'content' => 'Lesson content for the guide.',
             'workflow_state' => Material::STATE_AI_COMPLETED,
         ]);

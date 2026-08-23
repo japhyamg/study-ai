@@ -52,7 +52,11 @@ class TopicLinkerService
             $suggestions = $this->ai->suggestTopicLinks(
                 $topic->name,
                 $candidates->pluck('name')->all(),
-                ['userId' => $material->created_by, 'schoolId' => $material->school_id]
+                [
+                    'userId' => $material->created_by,
+                    'schoolId' => $material->school_id,
+                    'materialId' => $material->id,
+                ]
             );
         } catch (Throwable $e) {
             Log::warning('Topic linking failed', [
