@@ -1,6 +1,13 @@
 <x-layouts.studyai title="New study guide"
                    subtitle="Upload a document or paste text — AI writes the guide, flashcards and quiz.">
 
+    @php
+        // Decide the visible panel server-side too: with [x-cloak] hiding
+        // elements until Alpine boots, an x-cloak-only panel leaves an empty
+        // card on first paint.
+        $mode = old('source_url') ? 'link' : (old('content') ? 'text' : 'file');
+    @endphp
+
     <a href="{{ route('teacher.materials.index') }}" class="text-xs text-accent">← Back to study guides</a>
 
     @if ($unassigned)
@@ -88,7 +95,7 @@
                 </div>
 
                 {{-- File --}}
-                <div x-show="mode === 'file'" x-cloak>
+                <div x-show="mode === 'file'" @style(['display: none' => $mode !== 'file'])>
                     <label class="block cursor-pointer rounded-md border border-dashed border-line px-4 py-8 text-center transition-colors hover:border-line-strong"
                            :class="fileName ? 'border-accent/40 bg-accent/5' : ''"
                            @dragover.prevent @drop.prevent="handleDrop($event)">
@@ -119,14 +126,14 @@
                 </div>
 
                 {{-- Text --}}
-                <div x-show="mode === 'text'" x-cloak>
+                <div x-show="mode === 'text'" @style(['display: none' => $mode !== 'text'])>
                     <textarea name="content" rows="10"
                               class="w-full rounded-md border border-line bg-surface px-3 py-2 text-sm"
                               placeholder="Paste your notes, a lesson plan, or a chapter…">{{ old('content') }}</textarea>
                 </div>
 
                 {{-- Link --}}
-                <div x-show="mode === 'link'" x-cloak class="space-y-4">
+                <div x-show="mode === 'link'" @style(['display: none' => $mode !== 'link']) class="space-y-4">
                     <x-ui.field label="Source URL" name="source_url">
                         <input name="source_url" type="url" value="{{ old('source_url') }}"
                                placeholder="https://…"
@@ -170,7 +177,7 @@
         <script>
             function materialForm() {
                 return {
-                    mode: @js(old('source_url') ? 'link' : (old('content') ? 'text' : 'file')),
+                    mode: @js($mode),
                     linkType: @js(old('type', 'link')),
                     fileName: '',
                     classArm: @js(old('class_arm_id', '')),

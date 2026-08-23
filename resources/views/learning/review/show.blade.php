@@ -181,7 +181,7 @@
         <div class="mt-5">
 
             {{-- ─────────── Study guide ─────────── --}}
-            <div x-show="tab === 'guide'" x-cloak>
+            <div x-show="tab === 'guide'" @style(['display: none' => $tab !== 'guide'])>
                 @if (! $guide || (! $sections && ! $guide->summary))
                     @if ($canGenerate && ! $hasContent)
                         {{-- First visit after upload: this is the next step, so
@@ -258,7 +258,7 @@
             </div>
 
             {{-- ─────────── Flashcards ─────────── --}}
-            <div x-show="tab === 'flashcards'" x-cloak>
+            <div x-show="tab === 'flashcards'" @style(['display: none' => $tab !== 'flashcards'])>
                 @if ($material->flashcards->isEmpty())
                     <x-ui.empty icon="layers" title="No flashcards" message="None have been generated yet." />
                 @else
@@ -282,7 +282,7 @@
             </div>
 
             {{-- ─────────── Quiz ─────────── --}}
-            <div x-show="tab === 'quiz'" x-cloak>
+            <div x-show="tab === 'quiz'" @style(['display: none' => $tab !== 'quiz'])>
                 @if ($material->questions->isEmpty())
                     <x-ui.empty icon="clipboard" title="No quiz" message="No questions have been generated yet." />
                 @else
@@ -320,7 +320,7 @@
             </div>
 
             {{-- ─────────── Source ─────────── --}}
-            <div x-show="tab === 'source'" x-cloak>
+            <div x-show="tab === 'source'" @style(['display: none' => $tab !== 'source'])>
                 <div class="surface p-5">
                     <dl class="grid gap-3 text-sm sm:grid-cols-2">
                         <div>
@@ -392,7 +392,7 @@
             </div>
 
             {{-- ─────────── Notes ─────────── --}}
-            <div x-show="tab === 'notes'" x-cloak>
+            <div x-show="tab === 'notes'" @style(['display: none' => $tab !== 'notes'])>
                 <div class="max-w-2xl space-y-4">
                     @if ($material->notes->isEmpty())
                         <x-ui.empty icon="chat" title="No history yet"
@@ -425,7 +425,7 @@
             </div>
 
             {{-- ─────────── Links ─────────── --}}
-            <div x-show="tab === 'links'" x-cloak>
+            <div x-show="tab === 'links'" @style(['display: none' => $tab !== 'links'])>
                 @if ($links->isEmpty())
                     <x-ui.empty icon="link" title="No linked topics"
                                 message="Related topics appear here once other material in this subject has been processed." />
@@ -452,8 +452,8 @@
         {{-- ── Modals ── --}}
         @if ($canReview && $awaitingDecision)
             <div x-data="{ open: false }" @open-changes.window="open = true" x-cloak>
-                <div x-show="open" class="fixed inset-0 z-40 bg-black/40" @click="open = false"></div>
-                <div x-show="open" class="fixed inset-0 z-50 flex items-center justify-center p-4">
+                <div x-show="open" x-cloak class="fixed inset-0 z-40 bg-black/40" @click="open = false"></div>
+                <div x-show="open" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4">
                     <div class="surface w-full max-w-md p-5" @click.outside="open = false">
                         <h3 class="font-semibold text-ink">Request changes</h3>
                         <p class="mt-1 text-sm text-muted">The teacher sees this note and can revise and resubmit.</p>
@@ -473,8 +473,8 @@
             </div>
 
             <div x-data="{ open: false }" @open-reject.window="open = true" x-cloak>
-                <div x-show="open" class="fixed inset-0 z-40 bg-black/40" @click="open = false"></div>
-                <div x-show="open" class="fixed inset-0 z-50 flex items-center justify-center p-4">
+                <div x-show="open" x-cloak class="fixed inset-0 z-40 bg-black/40" @click="open = false"></div>
+                <div x-show="open" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4">
                     <div class="surface w-full max-w-md p-5" @click.outside="open = false">
                         <h3 class="font-semibold text-ink">Reject this material</h3>
                         <p class="mt-1 text-sm text-muted">Give a reason so the teacher knows why.</p>
@@ -497,8 +497,8 @@
         @if ($canGenerate)
             <div x-data="{ open: false, count: {{ (int) ($config['questionCount'] ?? config('ai.defaults.question_count', 10)) }} }"
                  @open-generate.window="open = true" x-cloak>
-                <div x-show="open" class="fixed inset-0 z-40 bg-black/40" @click="open = false"></div>
-                <div x-show="open" class="fixed inset-0 z-50 flex items-center justify-center p-4">
+                <div x-show="open" x-cloak class="fixed inset-0 z-40 bg-black/40" @click="open = false"></div>
+                <div x-show="open" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4">
                     <div class="surface w-full max-w-md p-5" @click.outside="open = false">
                         <h3 class="font-semibold text-ink">
                             {{ $hasContent ? 'Regenerate content' : 'Generate study content' }}
@@ -561,8 +561,8 @@
 
         @if ($canSubmit)
             <div x-data="{ open: false }" @open-submit.window="open = true" x-cloak>
-                <div x-show="open" class="fixed inset-0 z-40 bg-black/40" @click="open = false"></div>
-                <div x-show="open" class="fixed inset-0 z-50 flex items-center justify-center p-4">
+                <div x-show="open" x-cloak class="fixed inset-0 z-40 bg-black/40" @click="open = false"></div>
+                <div x-show="open" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4">
                     <div class="surface w-full max-w-md p-5" @click.outside="open = false">
                         <h3 class="font-semibold text-ink">Submit for review</h3>
                         <p class="mt-1 text-sm text-muted">An administrator will approve or send it back.</p>

@@ -98,6 +98,19 @@
     border-color: rgb(var(--c-border));
   }
 
+  /*
+   * Alpine strips x-cloak once a component has initialised, but the attribute
+   * does nothing on its own — without this rule the markup is briefly visible
+   * while the JS bundle loads and parses. That is why modals and dropdowns
+   * flashed on screen during page load.
+   *
+   * !important because the elements carrying x-cloak are usually positioned
+   * utilities (fixed inset-0, flex) whose own display would otherwise win.
+   */
+  [x-cloak] {
+    display: none !important;
+  }
+
   html {
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
