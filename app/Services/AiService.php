@@ -318,7 +318,11 @@ SOURCE (JSON: sections[] with h = heading, t = text):
                     throw $e;
                 }
 
-                $wait = $baseDelay * $attempt;
+                // Honour the provider's own Retry-After when it gave one —
+                // it knows its window better than a fixed backoff does.
+                $wait = $e instanceof AiServiceException && $e->retryAfter() !== null
+                    ? max($e->retryAfter(), 1)
+                    : $baseDelay * $attempt;
 
                 Log::warning('AI call failed, retrying', [
                     'attempt' => $attempt,
@@ -490,7 +494,16 @@ SOURCE (JSON: sections[] with h = heading, t = text):
 
     private function isRetryable(Throwable $e): bool
     {
+        // Prefer the status carried on the exception. Matching the message
+        // text used to work only because the message contained the raw status
+        // code; once those were replaced with user-safe wording, every 429
+        // silently became non-retryable.
+        if ($e instanceof AiServiceException) {
+            return $e->isRetryable();
+        }
+
         $msg = $e->getMessage();
+
         return str_contains($msg, '429') || str_contains($msg, 'rate_limit') || str_contains($msg, 'rate limit')
             || str_contains($msg, 'quota') || str_contains($msg, '503') || str_contains($msg, '502') || str_contains($msg, '500');
     }
@@ -529,6 +542,20 @@ SOURCE (JSON: sections[] with h = heading, t = text):
             return $decoded;
         }
 
+        // Truncation before transliteration.
+        //
+        // Running out of tokens mid-write is the single most common failure,
+        // and the text is still structurally intact at this point. Repairing
+        // first means the salvage works on exactly what the model produced.
+        if ($repaired = JsonRepair::repair($noTrailingCommas)) {
+            Log::warning('AI returned truncated JSON; repaired', [
+                'type' => $generationType,
+                'recovered_keys' => is_array($repaired) ? count($repaired) : 0,
+            ]);
+
+            return $repaired;
+        }
+
         // Unicode maths inside strings.
         $transliterated = $this->escapeControlChars($noTrailingCommas);
         $decoded = json_decode($transliterated, true, 512, JSON_INVALID_UTF8_IGNORE);
@@ -537,9 +564,9 @@ SOURCE (JSON: sections[] with h = heading, t = text):
             return $decoded;
         }
 
-        // Ran out of tokens mid-write: salvage the complete prefix.
+        // Transliteration can itself expose a clean truncation, so try again.
         if ($repaired = JsonRepair::repair($transliterated)) {
-            Log::warning('AI returned truncated JSON; repaired', [
+            Log::warning('AI returned truncated JSON; repaired after transliteration', [
                 'type' => $generationType,
                 'recovered_keys' => is_array($repaired) ? count($repaired) : 0,
             ]);
@@ -556,15 +583,25 @@ SOURCE (JSON: sections[] with h = heading, t = text):
             }
         }
 
+        // Capture the failure from the LAST meaningful decode. json_last_error()
+        // is global and every json_decode resets it — including the ones inside
+        // JsonRepair — so reading it here reported a stale "No error" and sent
+        // debugging in the wrong direction.
+        $decodeError = json_last_error() === JSON_ERROR_NONE
+            ? 'structure could not be recovered'
+            : json_last_error_msg();
+
         Log::error('AI returned unparseable JSON', [
             'type' => $generationType,
-            'error' => json_last_error_msg(),
+            'error' => $decodeError,
             'head' => mb_substr($text, 0, 400),
+            'tail' => mb_substr($text, -200),
+            'length' => mb_strlen($text),
         ]);
 
         throw new AiServiceException(
             'The AI returned a response that could not be read. Try generating again — if it keeps happening, reduce the amount of source text.',
-            'Unparseable JSON after repair: '.json_last_error_msg(),
+            'Unparseable JSON after repair: '.$decodeError,
         );
     }
 
@@ -594,33 +631,60 @@ SOURCE (JSON: sections[] with h = heading, t = text):
 
         $out = '';
         $len = mb_strlen($text, 'UTF-8');
+        $inString = false;
+
         for ($i = 0; $i < $len; $i++) {
             $char = mb_substr($text, $i, 1, 'UTF-8');
-            $cp = mb_ord($char, 'UTF-8');
-            if ($char === '\\') {
+
+            // Copy an escape pair through untouched; the next character is
+            // data, not syntax, and must not be re-examined.
+            if ($inString && $char === '\\') {
                 $out .= $char;
+
                 if ($i + 1 < $len) {
                     $out .= mb_substr($text, ++$i, 1, 'UTF-8');
                 }
+
                 continue;
             }
+
             if ($char === '"') {
+                $inString = ! $inString;
                 $out .= $char;
+
                 continue;
             }
-            // inside string? simple heuristic: track quotes (handled by previous)
+
+            $cp = mb_ord($char, 'UTF-8');
+
             if ($cp < 0x20) {
+                // Only escape control characters INSIDE a string. The newlines
+                // between tokens are structure: escaping those turns the
+                // document into one long invalid literal, which is exactly how
+                // a recoverable truncation became unparseable.
+                if (! $inString) {
+                    $out .= $char;
+
+                    continue;
+                }
+
                 if ($char === "\n") { $out .= '\\n'; continue; }
                 if ($char === "\r") { $out .= '\\r'; continue; }
                 if ($char === "\t") { $out .= '\\t'; continue; }
+
                 continue;
             }
-            if (isset($replacements[$char])) {
+
+            // Transliteration applies to text, not to syntax.
+            if ($inString && isset($replacements[$char])) {
                 $out .= $replacements[$char];
+
                 continue;
             }
+
             $out .= $char;
         }
+
         return $out;
     }
 

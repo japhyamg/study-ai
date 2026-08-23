@@ -30,6 +30,8 @@ class AiServiceException extends RuntimeException
         private string $kind = self::KIND_PROVIDER,
         private ?string $reference = null,
         ?Throwable $previous = null,
+        private ?int $status = null,
+        private ?int $retryAfter = null,
     ) {
         parent::__construct($publicMessage, 0, $previous);
 
@@ -57,6 +59,30 @@ class AiServiceException extends RuntimeException
     public function isActionable(): bool
     {
         return $this->kind === self::KIND_ACTIONABLE;
+    }
+
+    /** HTTP status, when this came from a provider response. */
+    public function status(): ?int
+    {
+        return $this->status;
+    }
+
+    /**
+     * Whether trying the same request again could succeed.
+     *
+     * Carried as data rather than inferred from the message: the public text
+     * is deliberately free of status codes, so string matching on it — which
+     * is what the retry logic used to do — silently stopped working.
+     */
+    public function isRetryable(): bool
+    {
+        return in_array($this->status, [408, 425, 429, 500, 502, 503, 504], true);
+    }
+
+    /** Provider-supplied Retry-After, in seconds, when it gave one. */
+    public function retryAfter(): ?int
+    {
+        return $this->retryAfter;
     }
 
     /**
@@ -91,6 +117,46 @@ class AiServiceException extends RuntimeException
             ],
         };
 
-        return new self($message, 'HTTP '.$status.' '.$body, $kind);
+        return new self(
+            $message,
+            'HTTP '.$status.' '.$body,
+            $kind,
+            null,
+            null,
+            $status,
+            self::retryAfterFrom($body),
+        );
+    }
+
+    /**
+     * Pull a retry hint out of the provider's error body.
+     *
+     * OpenRouter nests it as metadata.retry_after_seconds; others put it at
+     * the top level. Waiting the interval the provider actually asked for
+     * beats a fixed backoff that may be shorter than their window.
+     */
+    private static function retryAfterFrom(string $body): ?int
+    {
+        $decoded = json_decode($body, true);
+
+        if (! is_array($decoded)) {
+            return null;
+        }
+
+        $candidates = [
+            $decoded['retry_after_seconds'] ?? null,
+            $decoded['error']['metadata']['retry_after_seconds'] ?? null,
+            $decoded['error']['metadata']['headers']['Retry-After'] ?? null,
+        ];
+
+        foreach ($candidates as $candidate) {
+            if (is_numeric($candidate) && (int) $candidate > 0) {
+                // Cap it: a provider asking for ten minutes should fail fast
+                // rather than hold a worker.
+                return min((int) $candidate, 60);
+            }
+        }
+
+        return null;
     }
 }
