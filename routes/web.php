@@ -3,6 +3,8 @@
 use App\Http\Controllers\Admin\AcademicController;
 use App\Http\Controllers\Admin\ClassArmController;
 use App\Http\Controllers\AdminController;
+use App\Http\Controllers\Learning\MaterialUploadController;
+use App\Http\Controllers\Learning\MaterialWorkflowController;
 use App\Http\Controllers\MaterialController;
 use App\Http\Controllers\OnboardingController;
 use App\Http\Controllers\ProfileController;
@@ -241,3 +243,50 @@ Route::middleware(['auth', 'school.user', '2fa'])->prefix('materials')->name('ma
     Route::get('jobs/{job}', [MaterialController::class, 'jobStatus'])
         ->middleware('role:teacher,admin')->name('job.status');
 });
+
+/*
+|--------------------------------------------------------------------------
+| Learning — upload, AI generation and the review workflow
+|--------------------------------------------------------------------------
+|
+| Teachers upload and submit; admins approve, request changes or reject. Both
+| roles share the material page — the policy decides which controls render, so
+| there is no separate admin copy of the same screen.
+|
+*/
+Route::middleware(['auth', 'school.user', '2fa'])
+    ->prefix('learning')
+    ->name('learning.')
+    ->group(function () {
+
+        // ── Teacher: create and generate ──
+        Route::middleware('role:teacher,admin')->group(function () {
+            Route::get('upload', [MaterialUploadController::class, 'create'])->name('upload');
+            Route::post('upload', [MaterialUploadController::class, 'store'])->name('upload.store');
+            Route::post('materials/{material}/regenerate', [MaterialUploadController::class, 'regenerate'])
+                ->name('materials.regenerate');
+            Route::post('materials/{material}/submit', [MaterialWorkflowController::class, 'submit'])
+                ->name('materials.submit');
+        });
+
+        // ── Shared: the material's review page ──
+        Route::get('materials/{material}', [MaterialWorkflowController::class, 'show'])
+            ->middleware('role:teacher,admin')->name('materials.show');
+        Route::post('materials/{material}/notes', [MaterialWorkflowController::class, 'addNote'])
+            ->middleware('role:teacher,admin')->name('materials.notes');
+
+        // ── Admin: sign-off ──
+        Route::middleware('role:admin')->group(function () {
+            Route::get('review', [MaterialWorkflowController::class, 'queue'])->name('review');
+            Route::post('materials/{material}/approve', [MaterialWorkflowController::class, 'approve'])
+                ->name('materials.approve');
+            Route::post('materials/{material}/request-changes', [MaterialWorkflowController::class, 'requestChanges'])
+                ->name('materials.request-changes');
+            Route::post('materials/{material}/reject', [MaterialWorkflowController::class, 'reject'])
+                ->name('materials.reject');
+            Route::post('materials/{material}/publish', [MaterialWorkflowController::class, 'publish'])
+                ->name('materials.publish');
+            Route::post('materials/{material}/unpublish', [MaterialWorkflowController::class, 'unpublish'])
+                ->name('materials.unpublish');
+        });
+    });

@@ -5,7 +5,9 @@ namespace App\Services;
 use App\Models\AiCache;
 use App\Models\AiProvider;
 use App\Models\TokenUsage;
+use App\Support\JsonRepair;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Throwable;
 
 /**
@@ -23,11 +25,13 @@ class AiService
     private const SYSTEM_PROMPT = 'You are an expert educational content creator. Return ONLY valid JSON — no markdown, no backticks, no extra text. For math/science: use proper Unicode symbols (≤, ≥, ≠, ≈, ±, ∞, →, ∈, ⊂, ∪, ∩, ∫, ∑, √, ∂, ∇, Δ, θ, λ, μ, π, σ, ω, α, β, γ, ², ³, ⁰, ₁, ₂, ₃, ⁴, ⁵, ⁶, ⁷, ⁸, ⁹). Write fractions as a/b, exponents as x², derivatives as dy/dx, integrals as ∫f(x)dx. Show step-by-step solutions with numbered steps. Include units (m/s², mol⁻¹).';
 
     /**
-     * @param array $context ['userId'=>?, 'schoolId'=>?]
+     * @param  array  $context  ['userId'=>?, 'schoolId'=>?]
+     * @param  string  $generationType  selects the token ceiling in config/ai.php
      * @return mixed decoded JSON (array/object)
+     *
      * @throws Throwable
      */
-    public function completeJson(string $prompt, array $context = [], ?string $cacheKey = null)
+    public function completeJson(string $prompt, array $context = [], ?string $cacheKey = null, string $generationType = 'default')
     {
         $cacheKey = $cacheKey ?? md5($prompt);
 
@@ -36,14 +40,34 @@ class AiService
             return $cached->response;
         }
 
-        $result = $this->callWithRetry($prompt, $context);
+        $result = $this->callWithRetry($prompt, $context, $generationType);
 
         AiCache::updateOrCreate(
             ['content_hash' => $cacheKey],
-            ['response' => $result, 'expires_at' => now()->addDays(self::CACHE_TTL_DAYS)]
+            ['response' => $result, 'expires_at' => now()->addDays($this->cacheTtlDays())]
         );
 
         return $result;
+    }
+
+    private function cacheTtlDays(): int
+    {
+        return (int) config('ai.cache_ttl_days', self::CACHE_TTL_DAYS);
+    }
+
+    /** Token ceiling for a generation type, from config/ai.php. */
+    private function maxTokensFor(string $generationType): int
+    {
+        return (int) config(
+            "ai.max_tokens.{$generationType}",
+            config('ai.max_tokens.default', self::MAX_TOKENS)
+        );
+    }
+
+    /** How much source text to send for a given purpose. */
+    private function inputLimit(string $key = 'default'): int
+    {
+        return (int) config("ai.input_limits.{$key}", config('ai.input_limits.default', self::CONTENT_LIMIT));
     }
 
     /**
@@ -51,7 +75,7 @@ class AiService
      */
     public function generateStudyContent(string $content, string $type, array $options = [], array $context = []): mixed
     {
-        $truncated = mb_substr($content, 0, self::CONTENT_LIMIT);
+        $truncated = $this->truncate($content, $this->inputLimit());
         $questionCount = $options['questionCount'] ?? 10;
         $questionTypes = $options['questionTypes'] ?? ['multiple-choice'];
         $typesStr = implode(', ', $questionTypes);
@@ -89,7 +113,14 @@ Content:
 $truncated",
         ];
 
-        return $this->completeJson($prompts[$type] ?? $prompts['flashcards'], $context, md5($type . ':' . $truncated));
+        $generationType = $type === 'questions' ? 'questions' : 'flashcards';
+
+        return $this->completeJson(
+            $prompts[$type] ?? $prompts['flashcards'],
+            $context,
+            md5($type.':'.$truncated),
+            $generationType
+        );
     }
 
     public function generateTopics(string $topic, array $context = []): mixed
@@ -101,7 +132,7 @@ For math/science: include problem types, key formulas, solution methods, and pre
 Return ONLY a JSON array of objects with keys: topic, description, keyConcepts, difficulty.
 Example: [{\"topic\":\"Quadratic Equations\",\"description\":\"Solving and analyzing second-degree polynomial equations\",\"keyConcepts\":[\"Quadratic formula\",\"Factoring\",\"Discriminant\"],\"difficulty\":2}]";
 
-        return $this->completeJson($prompt, $context, md5('topics:' . $topic));
+        return $this->completeJson($prompt, $context, md5('topics:'.$topic), 'topics');
     }
 
     /**
@@ -109,7 +140,7 @@ Example: [{\"topic\":\"Quadratic Equations\",\"description\":\"Solving and analy
      */
     public function generateStudyGuide(string $content, array $context = []): array
     {
-        $snippet = mb_substr($content, 0, 5000);
+        $snippet = $this->truncate($content, $this->inputLimit('study_guide_section'));
 
         $overview = $this->completeJson(
             "You are creating a study guide for this content.
@@ -134,9 +165,10 @@ Rules:
 - All strings on ONE LINE
 
 Content:
-" . mb_substr($snippet, 0, 2000),
+" . $this->truncate($snippet, $this->inputLimit('overview')),
             $context,
-            md5('sg-overview:' . $content)
+            md5('sg-overview:'.$content),
+            'study_guide_overview'
         );
 
         $title = $overview['title'] ?? 'Study Guide';
@@ -185,9 +217,14 @@ RULES:
 - Be specific to the actual content provided, not generic
 
 Content:
-" . mb_substr($snippet, 0, 2500);
+" . $this->truncate($snippet, $this->inputLimit('study_guide_section'));
 
-            $batchResult = $this->completeJson($prompt, $context, md5('sg-batch:' . $content . ':' . implode(',', array_column($batch, 'heading'))));
+            $batchResult = $this->completeJson(
+                $prompt,
+                $context,
+                md5('sg-batch:'.$content.':'.implode(',', array_column($batch, 'heading'))),
+                'study_guide'
+            );
 
             $batchSections = [];
             if (is_array($batchResult)) {
@@ -223,9 +260,10 @@ Rules:
 - All strings on ONE LINE
 
 Content:
-" . mb_substr($snippet, 0, 2000),
+" . $this->truncate($snippet, $this->inputLimit('overview')),
                 $context,
-                md5('sg-terms:' . $content)
+                md5('sg-terms:'.$content),
+                'key_terms'
             );
             if (is_array($termsResult)) {
                 foreach ($termsResult as $t) {
@@ -252,63 +290,172 @@ Content:
 
     // ── internal ──
 
-    private function callWithRetry(string $prompt, array $context): mixed
+    /**
+     * Issue the request, retrying on rate limits and transient upstream errors.
+     *
+     * Backoff is linear (5s, 10s, 15s) rather than exponential: these calls
+     * already run inside a queued job, and providers publish linear guidance
+     * for 429s. Doubling just parks the worker for longer with no better
+     * success rate.
+     */
+    private function callWithRetry(string $prompt, array $context, string $generationType = 'default'): mixed
     {
+        $attempts = max(1, (int) config('ai.retry.attempts', self::MAX_RETRIES));
+        $baseDelay = max(1, (int) config('ai.retry.base_delay_seconds', 5));
         $lastError = null;
-        for ($attempt = 1; $attempt <= self::MAX_RETRIES; $attempt++) {
+
+        for ($attempt = 1; $attempt <= $attempts; $attempt++) {
             try {
-                $provider = $this->getActiveProvider();
-                if (!$provider) {
-                    throw new \RuntimeException('No active AI provider configured.');
-                }
-
-                // enforce token budget
-                app(TokenLimitService::class)->assertTeacherTokenBudget($context['userId'] ?? null);
-
-                $response = Http::withHeaders([
-                    'Authorization' => 'Bearer ' . $provider->api_key,
-                    'Content-Type' => 'application/json',
-                ])->timeout(120)->post(rtrim($provider->base_url, '/') . '/chat/completions', [
-                    'model' => $provider->model,
-                    'temperature' => 0.7,
-                    'max_tokens' => self::MAX_TOKENS,
-                    'messages' => [
-                        ['role' => 'system', 'content' => self::SYSTEM_PROMPT],
-                        ['role' => 'user', 'content' => $prompt],
-                    ],
-                ]);
-
-                if ($response->failed()) {
-                    throw new \RuntimeException('AI HTTP error: ' . $response->status() . ' ' . $response->body());
-                }
-
-                $json = $response->json();
-                $usage = $json['usage'] ?? null;
-                if ($usage) {
-                    $this->trackTokenUsage(
-                        (int) ($usage['prompt_tokens'] ?? 0),
-                        (int) ($usage['completion_tokens'] ?? 0),
-                        $provider->model,
-                        'generate',
-                        $context
-                    );
-                }
-
-                $text = $json['choices'][0]['message']['content'] ?? '';
-                return $this->parseJson($text);
+                return $this->dispatchCall($prompt, $context, $generationType);
             } catch (TokenLimitError $e) {
+                // A budget breach is a business rule, not a transient fault.
                 throw $e;
             } catch (Throwable $e) {
                 $lastError = $e;
-                if ($this->isRetryable($e) && $attempt < self::MAX_RETRIES) {
-                    $delay = min(5000 * (2 ** ($attempt - 1)), 30000);
-                    usleep($delay * 1000);
-                    continue;
+
+                if (! $this->isRetryable($e) || $attempt >= $attempts) {
+                    throw $e;
                 }
-                throw $e;
+
+                $wait = $baseDelay * $attempt;
+
+                Log::warning('AI call failed, retrying', [
+                    'attempt' => $attempt,
+                    'of' => $attempts,
+                    'wait_seconds' => $wait,
+                    'type' => $generationType,
+                    'error' => $e->getMessage(),
+                ]);
+
+                sleep($wait);
             }
         }
+
         throw $lastError ?? new \RuntimeException('AI call failed.');
+    }
+
+    /** A single request/response round trip. */
+    private function dispatchCall(string $prompt, array $context, string $generationType): mixed
+    {
+        $provider = $this->getActiveProvider();
+
+        if (! $provider) {
+            throw new \RuntimeException('No active AI provider is configured. Add one under Super Admin → AI providers.');
+        }
+
+        // Enforce the teacher's monthly budget before spending anything.
+        app(TokenLimitService::class)->assertTeacherTokenBudget($context['userId'] ?? null);
+
+        $response = Http::withHeaders([
+            'Authorization' => 'Bearer '.$provider->api_key,
+            'Content-Type' => 'application/json',
+        ])
+            ->timeout((int) config('ai.timeout', 120))
+            ->post(rtrim($provider->base_url, '/').'/chat/completions', [
+                'model' => $provider->model,
+                'temperature' => 0.7,
+                'max_tokens' => $this->maxTokensFor($generationType),
+                'messages' => [
+                    ['role' => 'system', 'content' => self::SYSTEM_PROMPT],
+                    ['role' => 'user', 'content' => $prompt],
+                ],
+            ]);
+
+        if ($response->failed()) {
+            throw new \RuntimeException('AI HTTP error: '.$response->status().' '.$response->body());
+        }
+
+        $json = $response->json();
+
+        if ($usage = $json['usage'] ?? null) {
+            $this->trackTokenUsage(
+                (int) ($usage['prompt_tokens'] ?? 0),
+                (int) ($usage['completion_tokens'] ?? 0),
+                $provider->model,
+                'generate',
+                $context
+            );
+        }
+
+        $text = $json['choices'][0]['message']['content'] ?? '';
+
+        if (trim($text) === '') {
+            throw new \RuntimeException('The AI returned an empty response. Try again.');
+        }
+
+        return $this->parseJson($text, $generationType);
+    }
+
+    /** Cut source text to a budget, telling the model it was cut. */
+    private function truncate(string $text, int $maxChars): string
+    {
+        if (mb_strlen($text) <= $maxChars) {
+            return $text;
+        }
+
+        return mb_substr($text, 0, $maxChars)."\n\n... [source truncated for length]";
+    }
+
+    /**
+     * Ask which existing topics are prerequisites of / related to / follow-ups
+     * from a new one.
+     *
+     * Only names are sent — the model never sees ids, so its answers are
+     * matched back by name and anything it invented is discarded by the caller.
+     *
+     * @param  list<string>  $existingTopicNames
+     * @return list<array{name: string, relationship_type: string, confidence_score: float}>
+     */
+    public function suggestTopicLinks(string $topicName, array $existingTopicNames, array $context = []): array
+    {
+        if ($existingTopicNames === []) {
+            return [];
+        }
+
+        $names = json_encode(array_values($existingTopicNames), JSON_UNESCAPED_SLASHES);
+
+        $prompt = <<<PROMPT
+        You are an educational topic linker. A new topic "{$topicName}" is being added to a syllabus.
+
+        Existing topics: {$names}
+
+        Identify which of the existing topics are prerequisites for, related to, or follow-ups from "{$topicName}".
+
+        Rules:
+        - Only use names exactly as they appear in the existing topics list
+        - relationship_type must be one of: prerequisite, related, follow_up
+        - confidence_score is a number between 0 and 1
+        - Omit topics with no genuine relationship — an empty array is a valid answer
+        - Return ONLY a JSON array, no markdown
+
+        Example: [{"name":"Algebra","relationship_type":"prerequisite","confidence_score":0.95}]
+        PROMPT;
+
+        $result = $this->completeJson(
+            $prompt,
+            $context,
+            md5('topic-links:'.$topicName.':'.$names),
+            'topic_links'
+        );
+
+        $rows = is_array($result) ? ($result['links'] ?? $result) : [];
+        $valid = [];
+
+        foreach ($rows as $row) {
+            if (! is_array($row) || empty($row['name'])) {
+                continue;
+            }
+
+            $type = $row['relationship_type'] ?? 'related';
+
+            $valid[] = [
+                'name' => (string) $row['name'],
+                'relationship_type' => in_array($type, \App\Models\TopicLink::TYPES, true) ? $type : 'related',
+                'confidence_score' => max(0.0, min(1.0, (float) ($row['confidence_score'] ?? 0.5))),
+            ];
+        }
+
+        return $valid;
     }
 
     private function getActiveProvider(): ?AiProvider
@@ -342,32 +489,75 @@ Content:
     }
 
     /**
-     * Sanitize + robustly parse JSON from an LLM response, ported from groq.ts.
+     * Parse a model response into JSON, escalating through repair strategies.
+     *
+     * Order matters: each step is cheaper and less lossy than the next.
+     *   1. strip markdown fences the model added anyway
+     *   2. strip control bytes that json_decode rejects outright
+     *   3. straight decode
+     *   4. drop trailing commas
+     *   5. transliterate unicode maths that breaks string escaping
+     *   6. close a document truncated by max_tokens
+     *   7. extract the first balanced object/array from surrounding prose
      */
-    public function parseJson(string $text): mixed
+    public function parseJson(string $text, string $generationType = 'default'): mixed
     {
-        $text = preg_replace('/^```(?:json)?\s*/m', '', $text);
-        $text = preg_replace('/```$/m', '', $text);
-        $text = trim($text);
+        $text = JsonRepair::stripControlBytes(JsonRepair::stripFences($text));
 
-        // sanitize unicode/math that breaks JSON (ported escapeMathInJsonStrings)
-        $text = $this->escapeControlChars($text);
+        if (trim($text) === '') {
+            throw new \RuntimeException('The AI returned an empty response.');
+        }
 
-        try {
-            return json_decode($text, true, 512, JSON_THROW_ON_ERROR);
-        } catch (\JsonException $e) {
-            // remove trailing commas
-            $cleaned = preg_replace('/,\s*([}\]])/', '$1', $text);
-            try {
-                return json_decode($cleaned, true, 512, JSON_THROW_ON_ERROR);
-            } catch (\JsonException $e2) {
-                $extracted = $this->extractJson($cleaned);
-                if ($extracted !== null) {
-                    return json_decode($extracted, true);
-                }
-                throw new \RuntimeException('Failed to parse AI response as JSON: ' . $e->getMessage());
+        $decoded = json_decode($text, true, 512, JSON_INVALID_UTF8_IGNORE);
+
+        if (json_last_error() === JSON_ERROR_NONE) {
+            return $decoded;
+        }
+
+        // Trailing commas — by far the most common single defect.
+        $noTrailingCommas = preg_replace('/,\s*([}\]])/', '$1', $text) ?? $text;
+        $decoded = json_decode($noTrailingCommas, true, 512, JSON_INVALID_UTF8_IGNORE);
+
+        if (json_last_error() === JSON_ERROR_NONE) {
+            return $decoded;
+        }
+
+        // Unicode maths inside strings.
+        $transliterated = $this->escapeControlChars($noTrailingCommas);
+        $decoded = json_decode($transliterated, true, 512, JSON_INVALID_UTF8_IGNORE);
+
+        if (json_last_error() === JSON_ERROR_NONE) {
+            return $decoded;
+        }
+
+        // Ran out of tokens mid-write: salvage the complete prefix.
+        if ($repaired = JsonRepair::repair($transliterated)) {
+            Log::warning('AI returned truncated JSON; repaired', [
+                'type' => $generationType,
+                'recovered_keys' => is_array($repaired) ? count($repaired) : 0,
+            ]);
+
+            return $repaired;
+        }
+
+        // Wrapped in prose despite instructions: pull out the first balanced value.
+        if ($extracted = $this->extractJson($transliterated)) {
+            $decoded = json_decode($extracted, true, 512, JSON_INVALID_UTF8_IGNORE);
+
+            if (json_last_error() === JSON_ERROR_NONE) {
+                return $decoded;
             }
         }
+
+        Log::error('AI returned unparseable JSON', [
+            'type' => $generationType,
+            'error' => json_last_error_msg(),
+            'head' => mb_substr($text, 0, 400),
+        ]);
+
+        throw new \RuntimeException(
+            'The AI returned a response that could not be read. Try generating again — if it keeps happening, reduce the amount of source text.'
+        );
     }
 
     private function escapeControlChars(string $text): string

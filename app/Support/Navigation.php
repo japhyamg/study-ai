@@ -76,6 +76,9 @@ final class Navigation
                 self::link('Sessions & terms', 'admin.terms.index', 'calendar', 'admin.terms.*'),
                 self::link('Assessments', 'admin.assessment-types.index', 'clipboard', 'admin.assessment-types.*'),
             ],
+            'Content' => [
+                self::link('Review queue', 'learning.review', 'clipboard', 'learning.review*'),
+            ],
             'Manage' => [
                 self::link('Settings', 'admin.settings', 'cog', 'admin.settings*'),
             ],
@@ -91,6 +94,7 @@ final class Navigation
             ],
             'Content' => [
                 self::link('Materials', 'teacher.materials.index', 'document', 'teacher.materials.*'),
+                self::link('Upload', 'learning.upload', 'plus', 'learning.upload*'),
                 self::link('Exams', 'teacher.exams.index', 'clipboard', 'teacher.exams.*'),
                 self::link('Question bank', 'teacher.question-bank.index', 'database', 'teacher.question-bank.*'),
             ],

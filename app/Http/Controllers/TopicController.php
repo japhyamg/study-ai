@@ -46,6 +46,7 @@ class TopicController extends Controller
             }
             Topic::create([
                 'user_id' => auth()->id(),
+                'school_id' => auth()->user()->currentSchool()?->id,
                 'name' => $t['topic'],
                 'content' => is_string($t['description'] ?? null) ? $t['description'] : json_encode($t, JSON_UNESCAPED_SLASHES),
             ]);

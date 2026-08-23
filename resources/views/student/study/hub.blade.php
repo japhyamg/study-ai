@@ -1,224 +1,322 @@
-<x-layouts.studyai title="{{ $material->title }} — Study">
-    <div class="flex items-center justify-between mb-4">
-        <div>
-            <a href="{{ route('student.study.index') }}" class="text-xs text-accent">← Study sets</a>
-            <h2 class="font-display text-xl mt-1 text-ink">{{ $material->title }}</h2>
-            <p class="text-xs text-faint">{{ $material->subject?->name ?? 'General' }} · {{ $material->classArm?->fullName() ?? 'General' }}</p>
-        </div>
-    </div>
+@php
+    $tab = request()->query('tab', 'guide');
+    $guide = $material->studyGuide;
+    $sections = $guide?->normalisedSections() ?? [];
+    $keyTerms = $guide?->normalisedKeyTerms() ?? [];
+    $topic = $material->topic;
 
-    @php
-        $tab = request()->query('tab', 'flashcards');
-        $tabs = [
-            ['flashcards', 'Flashcards', $material->flashcards->count()],
-            ['quiz', 'Quiz', $material->questions->count()],
-            ['edit', 'Edit Questions', $material->questions->count()],
-            ['images', 'Images', $material->images->count()],
-            ['guide', 'Study Guide', $material->studyGuide ? 1 : 0],
-        ];
-    @endphp
+    // Cards that are due now (or have never been seen).
+    $due = $material->flashcards
+        ->filter(fn ($card) => is_null($card->due_date) || $card->due_date <= now())
+        ->values();
 
-    {{-- Tab navigation: buttons update URL via JS; links work server-side as fallback --}}
-    <div class="border-b border-line mb-5 flex gap-1 flex-wrap">
-        @foreach($tabs as [$key, $label, $count])
-            @php($active = $tab === $key)
-            @if($active)
-                <button type="button" data-tab="{{ $key }}" class="tab-btn tab-btn-active">{{ $label }}@if($count > 0)<span class="text-xs text-faint">({{ $count }})</span>@endif</button>
-            @else
-                <button type="button" data-tab="{{ $key }}" class="tab-btn">{{ $label }}@if($count > 0)<span class="text-xs text-faint">({{ $count }})</span>@endif</button>
-            @endif
+    $tabs = [
+        ['guide', 'Study guide', count($sections)],
+        ['flashcards', 'Flashcards', $due->count()],
+        ['quiz', 'Quiz', $material->questions->count()],
+    ];
+@endphp
+
+<x-layouts.studyai :title="$material->title"
+                   :subtitle="collect([$material->subject?->name, $material->classArm?->fullName()])->filter()->join(' · ')">
+
+    <a href="{{ route('student.study.index') }}" class="text-xs text-accent">← All study sets</a>
+
+    <div class="mb-5 mt-3 flex flex-wrap gap-1 border-b border-line">
+        @foreach ($tabs as [$key, $label, $count])
+            <button type="button" data-tab="{{ $key }}"
+                    class="tab-btn {{ $tab === $key ? 'active' : '' }}">
+                {{ $label }}@if ($count > 0)<span class="ml-1 text-xs text-faint">{{ $count }}</span>@endif
+            </button>
         @endforeach
     </div>
 
-    {{-- ===== Flashcards tab: 3D flip + SM-2 rating + keyboard shortcuts ===== --}}
-    @php($due = $material->flashcards->filter(fn ($f) => is_null($f->due_date) || $f->due_date <= now()))
-    @if($tab === 'flashcards')
-    <div data-tab-panel="flashcards">
-        @if($material->flashcards->isEmpty())
-            <div class="empty">No flashcards for this material yet.<br>Upload a file with text content to generate them.</div>
-        @elseif($due->isEmpty())
-            <div class="empty">You've reviewed all due cards for this material. <a href="#!" onclick="location.reload()" class="text-accent">Refresh</a></div>
+    {{-- ─────────────── Study guide ─────────────── --}}
+    <div data-tab-panel="guide" @style(['display: none' => $tab !== 'guide'])>
+        @if (! $guide || (! $sections && ! $guide->summary))
+            <x-ui.empty icon="book" title="No study guide"
+                        message="Your teacher hasn't generated a study guide for this material." />
         @else
-            @php($first = $due->first())
-            <div class="flex items-center justify-between mb-3">
-                <span class="text-sm text-muted">Card <span id="cur">1</span> of <span id="total">{{ $due->count() }}</span></span>
-            </div>
-            <div class="flashcard surface" id="card" style="min-height:18rem">
-                <div class="flashcard-inner" id="inner">
-                    <div class="flashcard-face flashcard-front" id="front">{{ $first->front }}</div>
-                    <div class="flashcard-face flashcard-back" id="back">{{ $first->back }}</div>
+            <div class="grid gap-5 lg:grid-cols-3">
+                <div class="space-y-4 lg:col-span-2">
+                    @if ($guide->summary)
+                        <p class="text-sm leading-relaxed text-muted">{{ $guide->summary }}</p>
+                    @endif
+
+                    @foreach ($sections as $section)
+                        <section class="surface p-5">
+                            <h3 class="font-medium text-ink">{{ $section['heading'] }}</h3>
+                            <div class="mt-2 whitespace-pre-line text-sm leading-relaxed text-muted">{{ $section['body'] }}</div>
+                        </section>
+                    @endforeach
+                </div>
+
+                <div class="space-y-4">
+                    @if ($keyTerms)
+                        <x-ui.card title="Key terms">
+                            <dl class="space-y-2.5">
+                                @foreach ($keyTerms as $term)
+                                    <div class="text-sm">
+                                        <dt class="font-medium text-ink">{{ $term['term'] }}</dt>
+                                        <dd class="text-muted">{{ $term['definition'] }}</dd>
+                                    </div>
+                                @endforeach
+                            </dl>
+                        </x-ui.card>
+                    @endif
+
+                    @if ($topic)
+                        @php
+                            $prerequisites = $topic->prerequisites();
+                            $followUps = $topic->followUps();
+                            $unlocks = $topic->unlocks();
+                        @endphp
+
+                        @if ($prerequisites->isNotEmpty())
+                            <x-ui.card title="Study these first"
+                                       subtitle="This topic builds on them.">
+                                <ul class="space-y-1.5 text-sm">
+                                    @foreach ($prerequisites as $prerequisite)
+                                        <li class="text-muted">{{ $prerequisite->name }}</li>
+                                    @endforeach
+                                </ul>
+                            </x-ui.card>
+                        @endif
+
+                        @if ($followUps->isNotEmpty() || $unlocks->isNotEmpty())
+                            <x-ui.card title="What comes next">
+                                <ul class="space-y-1.5 text-sm">
+                                    @foreach ($followUps->merge($unlocks)->unique('id') as $next)
+                                        <li class="text-muted">{{ $next->name }}</li>
+                                    @endforeach
+                                </ul>
+                            </x-ui.card>
+                        @endif
+                    @endif
                 </div>
             </div>
-            <div class="mt-4 flex gap-2" id="rating" style="display:none">
-                <span class="text-xs text-muted mr-2">Rate difficulty (1–4):</span>
-                <div class="inline-flex gap-1.5">
-                    <form method="POST" action="{{ route('student.study.answer', $first) }}">@csrf
-                        <button type="submit" name="quality" value="0" class="btn btn-danger btn-sm" title="Again">Again</button>
-                    </form>
-                    <form method="POST" action="{{ route('student.study.answer', $first) }}">@csrf
-                        <button type="submit" name="quality" value="3" class="btn btn-ghost btn-sm" title="Hard">Hard</button>
-                    </form>
-                    <form method="POST" action="{{ route('student.study.answer', $first) }}">@csrf
-                        <button type="submit" name="quality" value="4" class="btn btn-outline btn-sm" title="Good">Good</button>
-                    </form>
-                    <form method="POST" action="{{ route('student.study.answer', $first) }}">@csrf
-                        <button type="submit" name="quality" value="5" class="btn btn-primary btn-sm" title="Easy">Easy</button>
-                    </form>
-                </div>
-            </div>
-            <button class="btn btn-ghost mt-3" id="flip-btn" onclick="flipCard()">Show answer</button>
         @endif
     </div>
-    @endif
 
-    {{-- ===== Quiz tab: read-only quiz with explanations ===== --}}
-    @if($tab === 'quiz')
-    <div data-tab-panel="quiz">
-        @if($material->questions->isEmpty())
-            <div class="empty">No quiz questions generated yet for this material.</div>
+    {{-- ─────────────── Flashcards ─────────────── --}}
+    <div data-tab-panel="flashcards" @style(['display: none' => $tab !== 'flashcards'])>
+        @if ($material->flashcards->isEmpty())
+            <x-ui.empty icon="layers" title="No flashcards"
+                        message="There are no flashcards for this material yet." />
+        @elseif ($due->isEmpty())
+            <x-ui.empty icon="check-circle" title="All caught up"
+                        message="You've reviewed every card that's due. Come back when the next one is scheduled." />
         @else
-            <form id="quiz-form" class="space-y-4">
-                @foreach($material->questions as $i => $q)
-                    @php($opts = is_array($q->options) ? $q->options : [])
-                    @php($correctIdx = $q->correct_idx ?? 0)
-                    <div class="surface p-4">
-                        <div class="font-medium">{{ $i + 1 }}. {{ $q->question }}</div>
-                        @if(!empty($opts))
-                            <div class="space-y-1 mt-2 text-sm">
-                                @foreach($opts as $oi => $opt)
-                                    <label class="flex items-center gap-2">
-                                        <input type="radio" name="q{{ $q->id }}" value="{{ $oi }}" disabled {{ $correctIdx == $oi ? 'checked' : '' }}>
-                                        {{ $opt }}
-                                        @if($correctIdx == $oi)<span class="text-xs text-ok"> ✓ correct</span>@endif
+            <div class="mx-auto max-w-2xl" x-data="flashcardDeck()">
+                <div class="mb-3 flex items-center justify-between text-sm text-muted">
+                    <span>Card <span class="tnum" x-text="index + 1"></span> of <span class="tnum">{{ $due->count() }}</span></span>
+                    <span class="text-xs text-faint">Space to flip · 1–4 to rate</span>
+                </div>
+
+                <div class="flashcard surface" :class="{ 'flipped': flipped }" @click="flip()">
+                    <div class="flashcard-inner">
+                        <div class="flashcard-face flashcard-front" x-text="card.front"></div>
+                        <div class="flashcard-face flashcard-back" x-text="card.back"></div>
+                    </div>
+                </div>
+
+                <div class="mt-4" x-show="flipped" x-cloak>
+                    <div class="mb-2 text-xs text-muted">How well did you know it?</div>
+                    <div class="grid grid-cols-4 gap-2">
+                        @foreach ([['0', 'Again', 'btn-danger'], ['3', 'Hard', 'btn-outline'], ['4', 'Good', 'btn-outline'], ['5', 'Easy', 'btn-primary']] as [$quality, $label, $class])
+                            <form method="POST" :action="answerUrl" class="contents">
+                                @csrf
+                                <input type="hidden" name="quality" value="{{ $quality }}">
+                                <button type="submit" class="btn {{ $class }} btn-sm w-full">{{ $label }}</button>
+                            </form>
+                        @endforeach
+                    </div>
+                </div>
+
+                <button type="button" class="btn btn-ghost mt-3" x-show="!flipped" @click="flip()">
+                    Show answer
+                </button>
+            </div>
+        @endif
+    </div>
+
+    {{-- ─────────────── Quiz ─────────────── --}}
+    <div data-tab-panel="quiz" @style(['display: none' => $tab !== 'quiz'])>
+        @if ($material->questions->isEmpty())
+            <x-ui.empty icon="clipboard" title="No quiz"
+                        message="There are no quiz questions for this material yet." />
+        @else
+            <div class="mx-auto max-w-3xl" x-data="quiz()">
+                <ol class="space-y-4">
+                    @foreach ($material->questions as $i => $question)
+                        @php $options = (array) $question->options; @endphp
+                        <li class="surface p-4" x-data="{ id: '{{ $question->id }}', correct: {{ (int) $question->correct_idx }} }">
+                            <div class="text-sm font-medium text-ink">{{ $i + 1 }}. {{ $question->question }}</div>
+
+                            <div class="mt-2.5 space-y-1.5">
+                                @foreach ($options as $index => $option)
+                                    <label class="flex cursor-pointer items-start gap-2 rounded-md px-2 py-1.5 text-sm transition-colors"
+                                           :class="answerClass(id, {{ $index }}, correct)">
+                                        <input type="radio" name="q-{{ $question->id }}" value="{{ $index }}"
+                                               class="mt-0.5" :disabled="submitted"
+                                               @change="answers[id] = {{ $index }}">
+                                        <span>{{ $option }}</span>
                                     </label>
                                 @endforeach
                             </div>
-                        @else
-                            <div class="mt-2 text-sm text-muted">Answer: {{ $q->correct_idx }}</div>
-                        @endif
-                        @if($q->explanation)
-                            <div class="mt-2 text-xs text-faint">{{ $q->explanation }}</div>
-                        @endif
-                    </div>
-                @endforeach
-            </form>
-        @endif
-    </div>
-    @endif
 
-    {{-- ===== Edit Questions tab ===== --}}
-    @if($tab === 'edit')
-    <div data-tab-panel="edit">
-        @if($material->questions->isEmpty())
-            <div class="empty mb-4">No questions yet. Generate questions by uploading content with more text.</div>
-        @else
-            <div class="space-y-4">
-                @foreach($material->questions as $i => $q)
-                    @php($opts = is_array($q->options) ? $q->options : [])
-                    @php($correctIdx = $q->correct_idx ?? 0)
-                    <div class="surface p-4">
-                        <div class="font-medium mb-2">{{ $i + 1 }}. {{ $q->question }}</div>
-                        @if(!empty($opts))
-                            <div class="space-y-1 text-sm">
-                                @foreach($opts as $oi => $opt)
-                                    @php($correct = $correctIdx == $oi)
-                                    <div class="flex items-center gap-2">
-                                        <input type="radio" name="q{{ $q->id }}" value="{{ $oi }}" {{ $correct ? 'checked' : '' }} disabled>
-                                        <span class="{{ $correct ? 'text-ok font-medium' : 'text-muted' }}">{{ $opt }}</span>
-                                    </div>
-                                @endforeach
-                            </div>
-                        @endif
+                            @if ($question->explanation)
+                                <p class="mt-2 text-xs text-faint" x-show="submitted" x-cloak>
+                                    {{ $question->explanation }}
+                                </p>
+                            @endif
+                        </li>
+                    @endforeach
+                </ol>
+
+                <div class="mt-5 flex items-center gap-3">
+                    <button type="button" class="btn btn-primary" x-show="!submitted" @click="submit()">
+                        Check answers
+                    </button>
+
+                    <div x-show="submitted" x-cloak class="flex items-center gap-3">
+                        <span class="text-sm text-ink">
+                            <span class="tnum font-medium" x-text="score"></span> of {{ $material->questions->count() }} correct
+                        </span>
+                        <button type="button" class="btn btn-ghost btn-sm" @click="reset()">Try again</button>
                     </div>
-                @endforeach
+                </div>
             </div>
         @endif
     </div>
-    @endif
 
-    {{-- ===== Images tab ===== --}}
-    @if($tab === 'images')
-    <div data-tab-panel="images">
-        @if($material->images->isEmpty())
-            <div class="empty">No images generated for this material.</div>
-        @else
-            <div class="grid grid-cols-2 md:grid-cols-3 gap-3">
-                @foreach($material->images as $img)
-                    <img src="{{ $img->url ?? asset('storage/app/public/'.$img->path) }}" alt="p{{ $img->page_number }}" class="surface w-full h-24 object-cover border border-line">
-                @endforeach
-            </div>
-        @endif
-    </div>
-    @endif
+    @push('scripts')
+        <script>
+            // ── Tabs ──
+            (function () {
+                const panels = document.querySelectorAll('[data-tab-panel]');
+                const buttons = document.querySelectorAll('[data-tab]');
 
-    {{-- ===== Study Guide tab ===== --}}
-    @if($tab === 'guide')
-    <div data-tab-panel="guide">
-        @if(!$material->studyGuide)
-            <div class="empty">No study guide generated yet.</div>
-        @else
-            @php($g = is_array($material->studyGuide->content) ? $material->studyGuide->content : ($material->studyGuide->content ? json_decode($material->studyGuide->content, true) : []))
-            <div class="space-y-5">
-                @if($g['title'] ?? null)
-                    <h3 class="font-display text-lg text-ink">{{ $g['title'] }}</h3>
-                @endif
-                @if($g['summary'] ?? null)
-                    <p class="text-sm text-muted leading-relaxed">{{ $g['summary'] }}</p>
-                @endif
-                @foreach(($g['sections'] ?? []) as $s)
-                    <div class="surface p-4">
-                        <div class="font-medium text-ink mb-1">{{ $s['heading'] ?? '' }}</div>
-                        <div class="text-sm text-muted whitespace-pre-line">{{ $s['content'] ?? '' }}</div>
-                    </div>
-                @endforeach
-                @if(empty($g['title']) && empty($g['summary']) && empty($g['sections']))
-                    <p class="text-sm text-muted">{{ is_string($material->studyGuide->content) ? $material->studyGuide->content : '' }}</p>
-                @endif
-            </div>
-        @endif
-    </div>
-    @endif
+                buttons.forEach((button) => {
+                    button.addEventListener('click', () => {
+                        const key = button.dataset.tab;
+
+                        panels.forEach((panel) => {
+                            panel.style.display = panel.dataset.tabPanel === key ? '' : 'none';
+                        });
+
+                        buttons.forEach((other) => {
+                            other.classList.toggle('active', other.dataset.tab === key);
+                        });
+
+                        const url = new URL(window.location.href);
+                        url.searchParams.set('tab', key);
+                        window.history.replaceState(null, '', url);
+                    });
+                });
+            })();
+
+            // ── Flashcards ──
+            function flashcardDeck() {
+                return {
+                    cards: @json($due->map(fn ($card) => ['id' => $card->id, 'front' => $card->front, 'back' => $card->back])->values()),
+                    index: 0,
+                    flipped: false,
+
+                    get card() {
+                        return this.cards[this.index] ?? { front: '', back: '' };
+                    },
+
+                    get answerUrl() {
+                        // Built from a named route with a placeholder id so the
+                        // prefix stays correct if routing changes.
+                        return '{{ route('student.study.answer', ['flashcard' => '__ID__']) }}'.replace('__ID__', this.card.id);
+                    },
+
+                    flip() {
+                        this.flipped = !this.flipped;
+                    },
+
+                    /**
+                     * Advance to another card.
+                     *
+                     * The card must be un-flipped *before* its text changes,
+                     * otherwise the answer of the next card is visible for the
+                     * length of the flip animation. Everything that changes
+                     * `index` goes through here for exactly that reason.
+                     */
+                    go(next) {
+                        if (next < 0 || next >= this.cards.length) return;
+
+                        if (!this.flipped) {
+                            this.index = next;
+                            return;
+                        }
+
+                        this.flipped = false;
+                        setTimeout(() => { this.index = next; }, 350);
+                    },
+
+                    init() {
+                        document.addEventListener('keydown', (event) => {
+                            const tag = event.target.tagName;
+                            if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+
+                            if (event.code === 'Space') {
+                                event.preventDefault();
+                                this.flip();
+                                return;
+                            }
+
+                            if (!this.flipped) return;
+
+                            const quality = { '1': 0, '2': 3, '3': 4, '4': 5 }[event.key];
+                            if (quality === undefined) return;
+
+                            const forms = this.$el.querySelectorAll('form');
+                            const map = { 0: 0, 3: 1, 4: 2, 5: 3 };
+                            forms[map[quality]]?.requestSubmit();
+                        });
+                    },
+                };
+            }
+
+            // ── Quiz ──
+            function quiz() {
+                return {
+                    answers: {},
+                    submitted: false,
+                    score: 0,
+
+                    submit() {
+                        this.submitted = true;
+                        this.score = 0;
+
+                        this.$el.querySelectorAll('[x-data]').forEach((node) => {
+                            const data = Alpine.$data(node);
+                            if (data.id !== undefined && this.answers[data.id] === data.correct) {
+                                this.score++;
+                            }
+                        });
+                    },
+
+                    reset() {
+                        this.submitted = false;
+                        this.answers = {};
+                        this.score = 0;
+                        this.$el.querySelectorAll('input[type=radio]').forEach((input) => {
+                            input.checked = false;
+                        });
+                    },
+
+                    answerClass(id, index, correct) {
+                        if (!this.submitted) return '';
+                        if (index === correct) return 'bg-success/10 text-success';
+                        if (this.answers[id] === index) return 'bg-danger/10 text-danger';
+                        return '';
+                    },
+                };
+            }
+        </script>
+    @endpush
 </x-layouts.studyai>
-
-@push('scripts')
-<script>
-(function () {
-  var panels = document.querySelectorAll('[data-tab-panel]');
-  var btns   = document.querySelectorAll('[data-tab]');
-  btns.forEach(function (b) {
-    b.addEventListener('click', function (e) {
-      var key = b.getAttribute('data-tab');
-      panels.forEach(function (p) {
-        p.style.display = (p.getAttribute('data-tab-panel') === key) ? '' : 'none';
-      });
-      btns.forEach(function (x) {
-        x.classList.toggle('tab-btn-active', x.getAttribute('data-tab') === key);
-      });
-      var u = new URL(window.location.href);
-      u.searchParams.set('tab', key);
-      window.history.replaceState(null, '', u);
-    });
-  });
-  // flashcard 3D flip + keyboard (1-4 ratings)
-  window.flipCard = function () {
-    var card = document.getElementById('card');
-    var rating = document.getElementById('rating');
-    var btn = document.getElementById('flip-btn');
-    if (!card) return;
-    card.classList.add('flipped');
-    if (rating) rating.style.display = 'block';
-    if (btn) btn.style.display = 'none';
-  };
-  document.addEventListener('keydown', function (e) {
-    if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
-    if (document.getElementById('rating') && document.getElementById('rating').style.display === 'block') {
-      var idx = { '1': 0, '2': 3, '3': 4, '4': 5 }[e.key];
-      if (idx !== undefined) {
-        var forms = document.getElementById('rating').querySelectorAll('button[name="quality"]');
-        if (forms[idx]) forms[idx].form.requestSubmit();
-      }
-    }
-  });
-})();
-</script>
-@endpush

@@ -4,23 +4,17 @@
             <a href="{{ route('teacher.materials.index') }}" class="text-xs text-accent">← Materials</a>
             <a href="{{ route('teacher.materials.edit', $material) }}" class="text-xs text-accent ml-3">Edit details</a>
         </div>
-        <div class="flex gap-2">
-            @if($material->review_status === 'pending')
-                <a href="{{ route('teacher.materials.review') }}?mid={{ $material->id }}" class="btn btn-outline btn-sm">Review</a>
-            @endif
-            @if(!$material->published)
-                <form method="POST" action="{{ route('teacher.materials.approve-all', $material) }}">@csrf
-                    <button class="btn btn-primary btn-sm">Publish</button>
-                </form>
-            @else
-                <button class="btn btn-outline btn-sm">Unpublish</button>
-            @endif
+        <div class="flex items-center gap-2">
+            <x-ui.badge :tone="$material->stateTone()">{{ $material->stateLabel() }}</x-ui.badge>
+            <a href="{{ route('learning.materials.show', $material) }}" class="btn btn-outline btn-sm">
+                Review &amp; publish
+            </a>
         </div>
     </div>
 
     <h2 class="font-display text-xl text-ink mb-1">{{ $material->title }}</h2>
     <div class="text-xs text-faint mb-4">
-        {{ $material->type }} · Status: {{ $material->status }} · Review: {{ $material->review_status }}
+        {{ $material->type }}
         · Class: {{ $material->classArm?->fullName() ?? '—' }} · Subject: {{ $material->subject?->name ?? '—' }}
     </div>
 
@@ -37,7 +31,7 @@
         @foreach($tabs as [$key, $label, $count])
             @php($active = $tab === $key)
             @if($active)
-                <button type="button" data-tab="{{ $key }}" class="tab-btn tab-btn-active">{{ $label }}@if($count) <span class="text-xs text-faint">({{ $count }})</span>@endif</button>
+                <button type="button" data-tab="{{ $key }}" class="tab-btn active">{{ $label }}@if($count) <span class="text-xs text-faint">({{ $count }})</span>@endif</button>
             @else
                 <a href="?tab={{ $key }}" data-tab="{{ $key }}" class="tab-btn">{{ $label }}@if($count) <span class="text-xs text-faint">({{ $count }})</span>@endif</a>
             @endif

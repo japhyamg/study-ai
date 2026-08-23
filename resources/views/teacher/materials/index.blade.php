@@ -23,16 +23,13 @@
                         <td class="px-4 py-2">{{ $m->title }}</td>
                         <td class="px-4 py-2 uppercase text-xs text-faint">{{ $m->type }}</td>
                         <td class="px-4 py-2">
-                            <span class="text-xs px-2 py-0.5 rounded border
-                                @if($m->status==='ready') border-green-200 bg-green-50 text-ok
-                                @elseif($m->status==='processing') border-blue-200 bg-blue-50 text-blue-700
-                                @elseif($m->status==='failed') border-red-200 bg-red-50 text-red-700
-                                @else border-line text-muted @endif">{{ $m->status }}</span>
-                            @if($m->review_status==='pending')<a href="{{ route('teacher.materials.review') }}" class="ml-2 text-xs text-accent">Review</a>@endif
+                            <x-ui.badge :tone="$m->stateTone()">{{ $m->stateLabel() }}</x-ui.badge>
                         </td>
-                        <td class="px-4 py-2">{{ $m->published ? 'Published' : '—' }}</td>
+                        <td class="px-4 py-2 text-xs text-faint">
+                            {{ $m->published_at?->diffForHumans() ?? '—' }}
+                        </td>
                         <td class="px-4 py-2 flex gap-2">
-                            <a href="{{ route('teacher.materials.show', $m) }}" class="text-accent text-xs">View</a>
+                            <a href="{{ route('learning.materials.show', $m) }}" class="text-accent text-xs">Open</a>
                             <a href="{{ route('teacher.materials.edit', $m) }}" class="text-muted text-xs">Edit</a>
                         </td>
                     </tr>

@@ -222,6 +222,8 @@ class DatabaseSeeder extends Seeder
         }
 
         // ── Sample content so dashboards are not empty ──
+        // One published material plus one waiting on review, so the review
+        // queue has something in it on a fresh install.
         Material::firstOrCreate(
             ['school_id' => $school->id, 'title' => 'Introduction to '.$firstSubject->name],
             [
@@ -230,9 +232,28 @@ class DatabaseSeeder extends Seeder
                 'type' => 'note',
                 'content' => 'Foundational concepts, worked examples and practice questions.',
                 'status' => Material::STATUS_READY,
+                'workflow_state' => Material::STATE_PUBLISHED,
                 'review_status' => Material::REVIEW_APPROVED,
                 'published' => true,
                 'published_at' => now()->subDays(3),
+                'ai_processed_at' => now()->subDays(3),
+                'created_by' => $teachers[0]->id,
+            ]
+        );
+
+        Material::firstOrCreate(
+            ['school_id' => $school->id, 'title' => $firstSubject->name.' — Revision Notes'],
+            [
+                'class_arm_id' => $primaryArm->id,
+                'subject_id' => $firstSubject->id,
+                'type' => 'note',
+                'content' => 'Summary notes covering the term, ready for end-of-term revision.',
+                'status' => Material::STATUS_READY,
+                'workflow_state' => Material::STATE_SUBMITTED,
+                'review_status' => Material::REVIEW_PENDING,
+                'published' => false,
+                'submitted_at' => now()->subHours(6),
+                'ai_processed_at' => now()->subHours(7),
                 'created_by' => $teachers[0]->id,
             ]
         );

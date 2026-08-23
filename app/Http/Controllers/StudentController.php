@@ -56,10 +56,10 @@ class StudentController extends Controller
         // Published teacher materials visible to this student (recent first)
         $publishedMaterials = Material::with(['subject'])
             ->where('school_id', $school?->id)
-            ->where('published', true)
+            ->published()
             ->whereIn('class_arm_id', $classIds->isEmpty() ? [null] : $classIds)
             ->orWhere(function ($q) use ($school) {
-                $q->where('school_id', $school?->id)->where('published', true)->whereNull('class_arm_id');
+                $q->where('school_id', $school?->id)->published()->whereNull('class_arm_id');
             })
             ->withCount(['flashcards', 'questions'])
             ->orderBy('published_at', 'desc')
@@ -103,7 +103,7 @@ class StudentController extends Controller
         return Flashcard::query()
             ->where(function ($q) use ($user, $sid) {
                 $q->where('user_id', $user->id)
-                  ->orWhereHas('material', fn ($m) => $m->where('published', true)->where('school_id', $sid));
+                  ->orWhereHas('material', fn ($m) => $m->published()->where('school_id', $sid));
             })
             // hide template cards the student already has a personal copy of
             ->whereRaw('not exists (select 1 from flashcards mine where mine.user_id = ? and mine.material_id = flashcards.material_id and mine.front = flashcards.front)', [$user->id]);
@@ -126,7 +126,7 @@ class StudentController extends Controller
         abort_unless($enrollment->user_id === auth()->id(), 403);
         $enrollment->load([
             'classArm.classLevel',
-            'classArm.materials' => fn ($q) => $q->where('published', true),
+            'classArm.materials' => fn ($q) => $q->published(),
         ]);
         return view('student.class-show', compact('enrollment'));
     }
@@ -137,10 +137,10 @@ class StudentController extends Controller
         $school = $this->school();
         $classIds = ClassEnrollment::where('user_id', $user->id)->pluck('class_arm_id')->filter();
         $materials = Material::with('classArm')
-            ->where('published', true)
+            ->published()
             ->whereIn('class_arm_id', $classIds->isEmpty() ? [null] : $classIds)
             ->orWhere(function ($q) use ($school) {
-                $q->where('school_id', $school?->id)->where('published', true)->whereNull('class_arm_id');
+                $q->where('school_id', $school?->id)->published()->whereNull('class_arm_id');
             })
             ->orderBy('created_at', 'desc')
             ->paginate(15);
@@ -308,7 +308,7 @@ class StudentController extends Controller
     {
         $user = auth()->user();
         $materials = Material::where('school_id', $user->currentSchool()?->id)
-            ->where('published', true)
+            ->published()
             ->withCount(['flashcards'])
             ->orderBy('title')
             ->get()
@@ -329,7 +329,7 @@ class StudentController extends Controller
      */
     public function studyHub(Material $material): View
     {
-        abort_unless($material->published, 403);
+        abort_unless($material->isPublished(), 403);
         $user = auth()->user();
         abort_unless($material->school_id === $user->currentSchool()?->id, 403);
 
@@ -339,6 +339,9 @@ class StudentController extends Controller
             'studyGuide',
             'images' => fn ($q) => $q->orderBy('id'),
             'subject',
+            // The topic graph powers the "what to study next" panel.
+            'topic.links.linkedTopic',
+            'topic.backlinks.topic',
         ]);
 
         return view('student.study.hub', compact('material'));
@@ -408,7 +411,7 @@ class StudentController extends Controller
         }
         // teacher-generated card on a published material in the student's school
         return (bool) $flashcard->material()
-            ->where('published', true)
+            ->published()
             ->where('school_id', $user->currentSchool()?->id)
             ->count();
     }

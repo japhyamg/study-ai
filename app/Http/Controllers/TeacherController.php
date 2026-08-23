@@ -55,7 +55,7 @@ class TeacherController extends Controller
             ->get();
 
         $pendingMaterials = Material::where('school_id', $school?->id)
-            ->where('review_status', Material::REVIEW_PENDING)
+            ->awaitingReview()
             ->with('classArm')
             ->get();
 
@@ -238,9 +238,13 @@ class TeacherController extends Controller
     public function reviewMaterials(): View
     {
         $school = $this->school();
-        $materials = Material::with(['classArm'])
+        $materials = Material::with(['classArm', 'creator'])
             ->where('school_id', $school?->id)
-            ->orderBy('review_status')
+            ->orderByRaw("CASE workflow_state
+                WHEN 'submitted' THEN 1
+                WHEN 'under_review' THEN 2
+                WHEN 'changes_requested' THEN 3
+                ELSE 4 END")
             ->orderBy('created_at', 'desc')
             ->paginate(20);
         return view('teacher.materials.review', compact('materials'));
@@ -252,13 +256,10 @@ class TeacherController extends Controller
         if ($material->school_id !== $school?->id) {
             abort(403);
         }
-        $material->update([
-            'review_status' => Material::REVIEW_APPROVED,
-            'status' => Material::STATUS_READY,
-            'published' => true,
-            'published_at' => now(),
-        ]);
-        return back()->with('status', 'Material approved.');
+        app(\App\Services\Learning\MaterialWorkflowService::class)
+            ->approveAndPublish($material, auth()->user());
+
+        return back()->with('status', 'Material approved and published.');
     }
 
     public function rejectMaterial(Request $request, Material $material): RedirectResponse
@@ -267,11 +268,11 @@ class TeacherController extends Controller
         if ($material->school_id !== $school?->id) {
             abort(403);
         }
-        $data = $request->validate(['review_notes' => 'nullable|string']);
-        $material->update([
-            'review_status' => Material::REVIEW_REJECTED,
-            'review_notes' => $data['review_notes'] ?? null,
-        ]);
+        $data = $request->validate(['review_notes' => 'required|string|max:2000']);
+
+        app(\App\Services\Learning\MaterialWorkflowService::class)
+            ->reject($material, auth()->user(), $data['review_notes']);
+
         return back()->with('status', 'Material rejected.');
     }
 
@@ -324,6 +325,7 @@ class TeacherController extends Controller
             'content' => $data['content'] ?? null,
             'source_url' => $data['source_url'] ?? null,
             'status' => Material::STATUS_DRAFT,
+            'workflow_state' => Material::STATE_DRAFT,
             'review_status' => Material::REVIEW_PENDING,
             'published' => false,
             'created_by' => auth()->id(),
@@ -345,7 +347,7 @@ class TeacherController extends Controller
                     'questionTypes' => $questionTypes,
                 ],
             ]);
-            $material->update(['status' => Material::STATUS_PROCESSING]);
+            $material->transitionTo(Material::STATE_AI_PROCESSING);
             if (config('queue.default') === 'sync') {
                 app(\App\Services\AiContentService::class)->runJob($job);
             } else {
@@ -398,12 +400,9 @@ class TeacherController extends Controller
             ->update(['review_status' => Material::REVIEW_APPROVED]);
         Question::where('material_id', $material->id)->where('review_status', Material::REVIEW_PENDING)
             ->update(['review_status' => Material::REVIEW_APPROVED]);
-        $material->update([
-            'review_status' => Material::REVIEW_APPROVED,
-            'status' => Material::STATUS_READY,
-            'published' => true,
-            'published_at' => now(),
-        ]);
+        app(\App\Services\Learning\MaterialWorkflowService::class)
+            ->approveAndPublish($material, auth()->user());
+
         return redirect()->route('teacher.materials.index')
             ->with('status', 'Material approved and published.');
     }
