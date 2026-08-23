@@ -300,20 +300,53 @@ class TeacherController extends Controller
     public function materialsStore(Request $request): RedirectResponse
     {
         $school = $this->school();
+        $accepted = implode(',', config('ai.uploads.accepted', ['pdf', 'docx', 'txt']));
+
         $data = $request->validate([
             'title' => 'required|string|max:255',
             'description' => 'nullable|string',
-            'type' => 'required|in:note,pdf,pptx,youtube,video,doc,link,url',
+            'type' => 'nullable|in:note,pdf,pptx,youtube,video,doc,link,url',
             'content' => 'nullable|string',
             'source_url' => 'nullable|url',
+            'document' => "nullable|file|mimes:{$accepted}|max:".config('ai.uploads.max_size_kb', 20480),
             'class_arm_id' => 'nullable|exists:class_arms,id',
             'subject_id' => 'nullable|exists:subjects,id',
-            // question settings (mirrors src/app/upload/page.tsx)
             'question_count' => 'nullable|integer|min:3|max:30',
             'question_types' => 'nullable|array',
             'question_types.*' => 'in:multiple-choice,true-false,fill-blank,short-answer',
             'generate' => 'nullable|boolean',
         ]);
+
+        $file = $request->file('document');
+
+        if (! $file && blank($data['content'] ?? null) && blank($data['source_url'] ?? null)) {
+            return back()->withInput()->withErrors([
+                'document' => 'Upload a file, paste some text, or give a link.',
+            ]);
+        }
+
+        // Extract in-request so an unreadable file (a scan, say) fails now with
+        // a message the teacher can act on, rather than in a queued job later.
+        $parser = app(\App\Services\Learning\MaterialParserService::class);
+        $text = $data['content'] ?? null;
+        $storedPath = null;
+
+        if ($file) {
+            try {
+                $text = $parser->parse($file);
+            } catch (\RuntimeException $e) {
+                return back()->withInput()->withErrors(['document' => $e->getMessage()]);
+            }
+
+            $storedPath = $file->store(
+                config('ai.uploads.path', 'materials'),
+                config('ai.uploads.disk', 'local')
+            );
+        }
+
+        $type = $file
+            ? $parser->detectType($file)
+            : ($data['type'] ?? (filled($data['source_url'] ?? null) ? 'link' : 'note'));
 
         $material = Material::create([
             'school_id' => $school?->id,
@@ -321,9 +354,17 @@ class TeacherController extends Controller
             'subject_id' => $data['subject_id'] ?? null,
             'title' => $data['title'],
             'description' => $data['description'] ?? null,
-            'type' => $data['type'],
-            'content' => $data['content'] ?? null,
+            'type' => $type,
+            'content' => $text,
             'source_url' => $data['source_url'] ?? null,
+            'file_path' => $storedPath,
+            'file_name' => $file?->getClientOriginalName(),
+            'file_type' => $file ? $type : null,
+            'file_size' => $file?->getSize(),
+            'generation_config' => [
+                'questionCount' => (int) ($data['question_count'] ?? config('ai.defaults.question_count', 10)),
+                'questionTypes' => $data['question_types'] ?? ['multiple-choice'],
+            ],
             'status' => Material::STATUS_DRAFT,
             'workflow_state' => Material::STATE_DRAFT,
             'review_status' => Material::REVIEW_PENDING,
@@ -331,8 +372,8 @@ class TeacherController extends Controller
             'created_by' => auth()->id(),
         ]);
 
-        // Teacher can request AI generation immediately
-        if ($request->filled('generate') && $request->boolean('generate')) {
+        // Generation needs text; a bare link has none.
+        if ($request->boolean('generate') && filled($text)) {
             $questionCount = (int) ($data['question_count'] ?? 10);
             $questionTypes = $data['question_types'] ?? ['multiple-choice'];
             $job = ProcessingJob::create([
@@ -355,8 +396,10 @@ class TeacherController extends Controller
             }
         }
 
-        return redirect()->route('teacher.materials.show', $material)
-            ->with('status', 'Material created.');
+        return redirect()->route('learning.materials.show', $material)
+            ->with('status', $request->boolean('generate') && filled($text)
+                ? 'Uploaded. Generating study content now.'
+                : 'Saved as a draft.');
     }
 
     public function materialsEdit(Material $material): View

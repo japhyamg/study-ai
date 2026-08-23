@@ -20,28 +20,55 @@ class MaterialWorkflowController extends Controller
 {
     public function __construct(private MaterialWorkflowService $workflow) {}
 
-    /** Admin queue of everything waiting on review. */
+    /**
+     * Tabs on the review queue, in the order an admin works through them.
+     *
+     * @var array<string, array{label: string, states: list<string>}>
+     */
+    private const FILTERS = [
+        'pending' => ['label' => 'Pending', 'states' => [Material::STATE_SUBMITTED]],
+        'in_review' => ['label' => 'In Review', 'states' => [Material::STATE_UNDER_REVIEW]],
+        'changes' => ['label' => 'Changes Req.', 'states' => [Material::STATE_CHANGES_REQUESTED]],
+        'approved' => ['label' => 'Approved', 'states' => [Material::STATE_APPROVED]],
+        'published' => ['label' => 'Published', 'states' => [Material::STATE_PUBLISHED]],
+        'rejected' => ['label' => 'Rejected', 'states' => [Material::STATE_REJECTED]],
+    ];
+
+    /** Admin queue, filtered by workflow state. */
     public function queue(Request $request): View
     {
         $this->authorize('viewAny', Material::class);
 
         $school = $request->user()->currentSchool();
+        $status = array_key_exists($request->query('status'), self::FILTERS)
+            ? $request->query('status')
+            : 'pending';
+
+        // One grouped query for every tab count, rather than six.
+        $byState = Material::where('school_id', $school?->id)
+            ->selectRaw('workflow_state, COUNT(*) as aggregate')
+            ->groupBy('workflow_state')
+            ->pluck('aggregate', 'workflow_state');
+
+        $filters = [];
+
+        foreach (self::FILTERS as $key => $filter) {
+            $filters[$key] = $filter + [
+                'count' => collect($filter['states'])->sum(fn ($state) => (int) $byState->get($state, 0)),
+            ];
+        }
 
         $materials = Material::with(['creator', 'subject', 'classArm.classLevel'])
             ->withCount(['flashcards', 'questions'])
+            ->withExists('studyGuide')
             ->where('school_id', $school?->id)
-            ->awaitingReview()
-            ->oldest('submitted_at')
+            ->whereIn('workflow_state', self::FILTERS[$status]['states'])
+            // Oldest submission first: the teacher who has waited longest
+            // should not be at the bottom of the page.
+            ->orderByRaw('COALESCE(submitted_at, created_at) asc')
             ->paginate(20);
 
-        $counts = [
-            'awaiting' => Material::where('school_id', $school?->id)->awaitingReview()->count(),
-            'published' => Material::where('school_id', $school?->id)->published()->count(),
-            'changes' => Material::where('school_id', $school?->id)
-                ->where('workflow_state', Material::STATE_CHANGES_REQUESTED)->count(),
-        ];
-
-        return view('learning.review.queue', compact('materials', 'counts'));
+        return view('learning.review.queue', compact('materials', 'filters', 'status'));
     }
 
     /** Full review page for one material, including everything AI produced. */

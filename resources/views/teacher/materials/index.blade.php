@@ -1,10 +1,14 @@
-<x-layouts.studyai title="Materials">
-    <div class="flex items-center justify-between mb-4">
-        <span class="font-semibold text-ink">Materials</span>
-        <a href="{{ route('teacher.materials.create') }}" class="px-3 py-1 btn btn-primary text-sm">Upload New</a>
+<x-layouts.studyai title="Study guides"
+                   subtitle="Upload material and AI writes the guide, flashcards and quiz.">
+    <div class="mb-4 flex items-center justify-end">
+        <x-ui.button :href="route('teacher.materials.create')" icon="plus">New study guide</x-ui.button>
     </div>
 
-    @if(session('status'))<div class="text-ok text-sm mb-3">{{ session('status') }}</div>@endif
+    @if (session('status'))
+        <div class="mb-4 rounded-md border border-success/30 bg-success/5 px-4 py-2.5 text-sm text-success">
+            {{ session('status') }}
+        </div>
+    @endif
 
     <div class="surface overflow-x-auto">
         <table class="w-full text-sm">
@@ -34,7 +38,7 @@
                         </td>
                     </tr>
                 @empty
-                    <tr><td colspan="5" class="px-4 py-6 text-center text-faint">No materials yet.</td></tr>
+                    <tr><td colspan="5" class="px-4 py-8 text-center text-faint">No study guides yet — create your first one.</td></tr>
                 @endforelse
             </tbody>
         </table>

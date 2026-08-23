@@ -3,7 +3,7 @@
 use App\Http\Controllers\Admin\AcademicController;
 use App\Http\Controllers\Admin\ClassArmController;
 use App\Http\Controllers\AdminController;
-use App\Http\Controllers\Learning\MaterialUploadController;
+use App\Http\Controllers\Learning\MaterialGenerationController;
 use App\Http\Controllers\Learning\MaterialWorkflowController;
 use App\Http\Controllers\MaterialController;
 use App\Http\Controllers\OnboardingController;
@@ -261,9 +261,7 @@ Route::middleware(['auth', 'school.user', '2fa'])
 
         // ── Teacher: create and generate ──
         Route::middleware('role:teacher,admin')->group(function () {
-            Route::get('upload', [MaterialUploadController::class, 'create'])->name('upload');
-            Route::post('upload', [MaterialUploadController::class, 'store'])->name('upload.store');
-            Route::post('materials/{material}/regenerate', [MaterialUploadController::class, 'regenerate'])
+            Route::post('materials/{material}/regenerate', [MaterialGenerationController::class, 'regenerate'])
                 ->name('materials.regenerate');
             Route::post('materials/{material}/submit', [MaterialWorkflowController::class, 'submit'])
                 ->name('materials.submit');

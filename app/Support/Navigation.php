@@ -77,7 +77,7 @@ final class Navigation
                 self::link('Assessments', 'admin.assessment-types.index', 'clipboard', 'admin.assessment-types.*'),
             ],
             'Content' => [
-                self::link('Review queue', 'learning.review', 'clipboard', 'learning.review*'),
+                self::link('Study guides', 'learning.review', 'document', ['learning.review*', 'learning.materials.*']),
             ],
             'Manage' => [
                 self::link('Settings', 'admin.settings', 'cog', 'admin.settings*'),
@@ -93,8 +93,7 @@ final class Navigation
                 self::link('My classes', 'teacher.classes.index', 'users', 'teacher.classes.*'),
             ],
             'Content' => [
-                self::link('Materials', 'teacher.materials.index', 'document', 'teacher.materials.*'),
-                self::link('Upload', 'learning.upload', 'plus', 'learning.upload*'),
+                self::link('Study guides', 'teacher.materials.index', 'document', ['teacher.materials.*', 'learning.materials.*']),
                 self::link('Exams', 'teacher.exams.index', 'clipboard', 'teacher.exams.*'),
                 self::link('Question bank', 'teacher.question-bank.index', 'database', 'teacher.question-bank.*'),
             ],
@@ -121,17 +120,23 @@ final class Navigation
     /**
      * @return array{label:string,url:string,icon:string,active:bool}|null
      */
-    private static function link(string $label, string $route, string $icon, ?string $activePattern = null): ?array
+    /**
+     * @param  string|list<string>|null  $activePattern  one or more patterns that
+     *                                                   should light this item up
+     */
+    private static function link(string $label, string $route, string $icon, string|array|null $activePattern = null): ?array
     {
         if (! Route::has($route)) {
             return null;
         }
 
+        $patterns = (array) ($activePattern ?? $route);
+
         return [
             'label' => $label,
             'url' => route($route),
             'icon' => $icon,
-            'active' => request()->routeIs($activePattern ?? $route),
+            'active' => request()->routeIs(...$patterns),
         ];
     }
 }
