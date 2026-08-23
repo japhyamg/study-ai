@@ -299,7 +299,7 @@ class TeacherController extends Controller
         return back()->with('status', 'Question added.');
     }
 
-    public function updateQuestion(Request $request, Exam $exam, ExamQuestion $question): RedirectResponse
+    public function updateExamQuestion(Request $request, Exam $exam, ExamQuestion $question): RedirectResponse
     {
         $this->authorize('update', $exam);
         abort_unless($question->exam_id === $exam->id, 404);
