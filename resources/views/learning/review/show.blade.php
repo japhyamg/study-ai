@@ -224,53 +224,11 @@
                                     message="Nothing has been generated for this material yet." />
                     @endif
                 @else
-                    {{-- Title banner --}}
-                    <div class="surface flex items-center gap-4 border-s-2 border-s-success p-5">
-                        <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-surface-sunk text-muted">
-                            <x-icon name="document" />
-                        </span>
-                        <div class="min-w-0">
-                            <h3 class="font-display text-lg text-ink">{{ $guide->displayTitle() }}</h3>
-                            <p class="text-xs text-faint">
-                                {{ collect([$material->subject?->name, $material->classArm?->fullName()])->filter()->join(' · ') }}
-                            </p>
-                        </div>
-                    </div>
-
-                    @if ($guide->summary)
-                        <p class="mt-4 text-sm leading-relaxed text-muted">{{ $guide->summary }}</p>
-                    @endif
-
-                    {{-- Numbered section cards --}}
-                    <div class="mt-4 space-y-4">
-                        @foreach ($sections as $index => $section)
-                            <section class="surface p-5">
-                                <div class="flex gap-4">
-                                    <span class="tnum flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-surface-sunk text-xs font-medium text-muted">
-                                        {{ $index + 1 }}
-                                    </span>
-                                    <div class="min-w-0 flex-1">
-                                        <h4 class="font-semibold text-ink">{{ $section['heading'] }}</h4>
-                                        <x-prose :text="$section['body']" class="mt-2" />
-                                    </div>
-                                </div>
-                            </section>
-                        @endforeach
-                    </div>
-
-                    @if ($keyTerms)
-                        <section class="surface mt-4 p-5">
-                            <h4 class="font-semibold text-ink">Key terms</h4>
-                            <dl class="mt-3 space-y-2">
-                                @foreach ($keyTerms as $term)
-                                    <div class="text-sm">
-                                        <dt class="inline font-medium text-ink">{{ $term['term'] }}:</dt>
-                                        <dd class="inline text-muted"> {{ $term['definition'] }}</dd>
-                                    </div>
-                                @endforeach
-                            </dl>
-                        </section>
-                    @endif
+                    <x-study-guide :guide="$guide"
+                                   :sections="$sections"
+                                   :key-terms="$keyTerms"
+                                   :subtitle="collect([$material->subject?->name, $material->classArm?->fullName()])->filter()->join(' · ')"
+                                   :storage-key="'guide:'.$material->id" />
                 @endif
             </div>
 

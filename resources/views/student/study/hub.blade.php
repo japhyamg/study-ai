@@ -38,33 +38,16 @@
                         message="Your teacher hasn't generated a study guide for this material." />
         @else
             <div class="grid gap-5 lg:grid-cols-3">
-                <div class="space-y-4 lg:col-span-2">
-                    @if ($guide->summary)
-                        <p class="text-sm leading-relaxed text-muted">{{ $guide->summary }}</p>
-                    @endif
-
-                    @foreach ($sections as $section)
-                        <section class="surface p-5">
-                            <h3 class="font-medium text-ink">{{ $section['heading'] }}</h3>
-                            <div class="mt-2 whitespace-pre-line text-sm leading-relaxed text-muted">{{ $section['body'] }}</div>
-                        </section>
-                    @endforeach
+                <div class="lg:col-span-2">
+                    {{-- Key terms are rendered by the component, so they are not
+                         repeated in the sidebar here. --}}
+                    <x-study-guide :guide="$guide"
+                                   :sections="$sections"
+                                   :key-terms="$keyTerms"
+                                   :storage-key="'guide:'.$material->id" />
                 </div>
 
                 <div class="space-y-4">
-                    @if ($keyTerms)
-                        <x-ui.card title="Key terms">
-                            <dl class="space-y-2.5">
-                                @foreach ($keyTerms as $term)
-                                    <div class="text-sm">
-                                        <dt class="font-medium text-ink">{{ $term['term'] }}</dt>
-                                        <dd class="text-muted">{{ $term['definition'] }}</dd>
-                                    </div>
-                                @endforeach
-                            </dl>
-                        </x-ui.card>
-                    @endif
-
                     @if ($topic)
                         @php
                             $prerequisites = $topic->prerequisites();
