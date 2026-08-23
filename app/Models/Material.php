@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\Learning\DocumentStructurer;
 use App\Services\Learning\MaterialParserService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
@@ -46,6 +47,7 @@ class Material extends Model
         'school_id', 'class_arm_id', 'subject_id', 'title', 'description',
         'type', 'source_url', 'storage_url', 'file_path', 'file_name',
         'file_type', 'file_size', 'content', 'transcript', 'generation_config',
+        'structured_content', 'structured_chars', 'structured_at',
         'status', 'workflow_state', 'review_status', 'review_notes',
         'published', 'published_at', 'ai_processed_at', 'submitted_at',
         'reviewed_at', 'reviewed_by', 'created_by',
@@ -59,6 +61,8 @@ class Material extends Model
         'reviewed_at' => 'datetime',
         'generation_config' => 'array',
         'file_size' => 'integer',
+        'structured_chars' => 'integer',
+        'structured_at' => 'datetime',
     ];
 
     // ── Legacy status columns (kept in sync, no longer authoritative) ──
@@ -420,5 +424,61 @@ class Material extends Model
         }
 
         return $this->sourceTextError;
+    }
+
+    /**
+     * The material's text as a compact JSON section list, for the AI.
+     *
+     * Raw extraction carries page furniture, page numbers and hard-wrapped
+     * lines — roughly 40% of the characters in a typical PDF, paid for as
+     * tokens on every run. This is the packed form, cached on the row because
+     * structuring is deterministic and re-deriving it would mean re-parsing
+     * the file every time.
+     *
+     * The file stays the source of truth; this is a derived cache, and
+     * clearing it simply triggers a rebuild.
+     */
+    public function structuredContent(): string
+    {
+        if ($this->structured_content) {
+            return $this->structured_content;
+        }
+
+        $text = $this->sourceText();
+
+        if ($text === '') {
+            return '';
+        }
+
+        $packed = app(DocumentStructurer::class)->pack(
+            $text,
+            (int) config('ai.input_limits.default', 30000)
+        );
+
+        // Best-effort: a failed cache write must not fail generation.
+        try {
+            $this->forceFill([
+                'structured_content' => $packed,
+                'structured_chars' => mb_strlen($packed),
+                'structured_at' => now(),
+            ])->saveQuietly();
+        } catch (Throwable $e) {
+            Log::warning('Could not cache structured content', [
+                'material_id' => $this->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
+
+        return $packed;
+    }
+
+    /** Drop the cache so the next run re-reads and re-structures the source. */
+    public function forgetStructuredContent(): void
+    {
+        $this->forceFill([
+            'structured_content' => null,
+            'structured_chars' => null,
+            'structured_at' => null,
+        ])->saveQuietly();
     }
 }

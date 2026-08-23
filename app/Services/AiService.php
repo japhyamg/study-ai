@@ -22,7 +22,7 @@ class AiService
     private const CONTENT_LIMIT = 5000;
     private const CACHE_TTL_DAYS = 30;
 
-    private const SYSTEM_PROMPT = 'You are an expert educational content creator. Return ONLY valid JSON — no markdown, no backticks, no extra text. For math/science: use proper Unicode symbols (≤, ≥, ≠, ≈, ±, ∞, →, ∈, ⊂, ∪, ∩, ∫, ∑, √, ∂, ∇, Δ, θ, λ, μ, π, σ, ω, α, β, γ, ², ³, ⁰, ₁, ₂, ₃, ⁴, ⁵, ⁶, ⁷, ⁸, ⁹). Write fractions as a/b, exponents as x², derivatives as dy/dx, integrals as ∫f(x)dx. Show step-by-step solutions with numbered steps. Include units (m/s², mol⁻¹).';
+    private const SYSTEM_PROMPT = 'You are an expert educational content creator. Source material arrives as compact JSON — an array of sections, each with an optional heading "h" and its text "t". Treat it as one continuous document and use the headings to understand its structure. Return ONLY valid JSON — no markdown, no backticks, no extra text. For math/science: use proper Unicode symbols (≤, ≥, ≠, ≈, ±, ∞, →, ∈, ⊂, ∪, ∩, ∫, ∑, √, ∂, ∇, Δ, θ, λ, μ, π, σ, ω, α, β, γ, ², ³, ⁰, ₁, ₂, ₃, ⁴, ⁵, ⁶, ⁷, ⁸, ⁹). Write fractions as a/b, exponents as x², derivatives as dy/dx, integrals as ∫f(x)dx. Show step-by-step solutions with numbered steps. Include units (m/s², mol⁻¹).';
 
     /**
      * @param  array  $context  ['userId'=>?, 'schoolId'=>?]
@@ -92,7 +92,7 @@ For math/science: include formulas, theorems, definitions, and problem-solving m
 Return ONLY a JSON array of objects with keys: front, back, tags.
 Example: [{\"front\":\"What is the quadratic formula?\",\"back\":\"x = (-b ± √(b²-4ac)) / 2a\",\"tags\":[\"algebra\",\"quadratic\"]}]
 
-Content:
+SOURCE (JSON: sections[] with h = heading, t = text):
 $truncated",
 
             'questions' => "Create $questionCount $typesStr questions from this content. Each needs 4 options (A-D), one correct answer (correctIdx: 0-3), and a brief explanation.
@@ -109,7 +109,7 @@ CRITICAL RULES:
 Return ONLY a JSON array of objects with keys: question, options, correctIdx, explanation, difficulty, tags.
 Example: [{\"question\":\"Solve: x squared plus 5x plus 6 equals 0\",\"options\":[\"x equals negative 2 and x equals negative 3\",\"x equals 2 and x equals 3\",\"x equals negative 1 and x equals negative 6\",\"x equals 1 and x equals 6\"],\"correctIdx\":0,\"explanation\":\"Step 1: Factor into x plus 2 times x plus 3 equals 0. Step 2: x equals negative 2 or x equals negative 3.\",\"difficulty\":2,\"tags\":[\"algebra\"]}]
 
-Content:
+SOURCE (JSON: sections[] with h = heading, t = text):
 $truncated",
         ];
 
@@ -164,7 +164,7 @@ Rules:
 - No math symbols in strings, write as words
 - All strings on ONE LINE
 
-Content:
+SOURCE (JSON: sections[] with h = heading, t = text):
 " . $this->truncate($snippet, $this->inputLimit('overview')),
             $context,
             md5('sg-overview:'.$content),
@@ -216,7 +216,7 @@ RULES:
 - All strings on ONE LINE (use \\n for line breaks, never actual newlines)
 - Be specific to the actual content provided, not generic
 
-Content:
+SOURCE (JSON: sections[] with h = heading, t = text):
 " . $this->truncate($snippet, $this->inputLimit('study_guide_section'));
 
             $batchResult = $this->completeJson(
@@ -259,7 +259,7 @@ Rules:
 - No math symbols: write words instead
 - All strings on ONE LINE
 
-Content:
+SOURCE (JSON: sections[] with h = heading, t = text):
 " . $this->truncate($snippet, $this->inputLimit('overview')),
                 $context,
                 md5('sg-terms:'.$content),

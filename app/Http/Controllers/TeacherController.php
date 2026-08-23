@@ -554,6 +554,12 @@ class TeacherController extends Controller
 
         $material->update($data);
 
+        // Editing pasted content changes what the AI should see, so the
+        // structured cache has to go with it.
+        if (array_key_exists('content', $data)) {
+            $material->forgetStructuredContent();
+        }
+
         return back()->with('status', 'Material updated.');
     }
 

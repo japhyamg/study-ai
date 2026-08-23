@@ -370,6 +370,16 @@
                                 </p>
                             @endif
 
+                            @if ($material->structured_chars)
+                                <p class="mt-1 text-xs text-faint">
+                                    Sent to the AI as
+                                    {{ number_format($material->structured_chars) }} characters of structured
+                                    JSON — page headers, footers and line breaks removed, which is
+                                    {{ max(0, 100 - (int) round($material->structured_chars / max(1, mb_strlen($sourceText)) * 100)) }}%
+                                    fewer tokens per run.
+                                </p>
+                            @endif
+
                             <pre class="mt-2 max-h-96 overflow-auto whitespace-pre-wrap rounded-md bg-surface-sunk p-3 text-xs text-muted">{{ $sourceText }}</pre>
                         </details>
                     @elseif ($sourceError)

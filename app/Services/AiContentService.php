@@ -55,7 +55,10 @@ class AiContentService
 
         $material->transitionTo(Material::STATE_AI_PROCESSING);
 
-        $content = $material->sourceText();
+        // Structured, boilerplate-stripped JSON rather than the raw dump:
+        // same information, far fewer tokens, and section boundaries the
+        // model can actually use.
+        $content = $material->structuredContent();
 
         if ($content === '') {
             $this->failJob(
