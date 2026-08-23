@@ -58,7 +58,19 @@ class MaterialParserService
             );
         }
 
-        return $text;
+        return $this->capLength($text);
+    }
+
+    /**
+     * Cap stored text. Whole textbooks do get uploaded; there is no value in
+     * carrying half a megabyte of appendices on every row when generation only
+     * ever reads the first few thousand characters.
+     */
+    private function capLength(string $text): string
+    {
+        $max = (int) config('ai.max_extractable_chars', 500000);
+
+        return mb_strlen($text) > $max ? mb_substr($text, 0, $max) : $text;
     }
 
     /**
@@ -377,10 +389,45 @@ class MaterialParserService
 
     private function cleanText(string $text): string
     {
+        $text = $this->toUtf8($text);
+
         $text = str_replace(["\r\n", "\r"], "\n", $text);
         $text = preg_replace('/[ \t]{3,}/', '  ', $text) ?? $text;
         $text = preg_replace('/\n{4,}/', "\n\n\n", $text) ?? $text;
 
         return trim($text);
+    }
+
+    /**
+     * Force the extracted text into well-formed UTF-8.
+     *
+     * PDF and DOCX producers routinely emit Windows-1252 bytes — the soft
+     * hyphen 0xAD and curly quotes 0x91-0x94 are the usual offenders. Those
+     * are legal single bytes in Latin-1 but invalid on their own in UTF-8, and
+     * MySQL rejects the whole INSERT with "Incorrect string value" rather than
+     * storing them. Converting here means a bad byte can never reach the
+     * database, whatever produced the file.
+     */
+    private function toUtf8(string $text): string
+    {
+        if (! mb_check_encoding($text, 'UTF-8')) {
+            // Windows-1252 is a superset of Latin-1 and by far the most common
+            // source; it maps every byte, so this cannot fail.
+            $text = mb_convert_encoding($text, 'UTF-8', 'Windows-1252');
+        }
+
+        // Belt and braces: drop anything still not valid UTF-8.
+        $text = @iconv('UTF-8', 'UTF-8//IGNORE', $text) ?: $text;
+
+        // Normalise the punctuation those code pages introduce, so the text
+        // reads cleanly and prompts stay compact.
+        return strtr($text, [
+            "\u{00AD}" => '',      // soft hyphen — invisible, breaks word matching
+            "\u{2018}" => "'", "\u{2019}" => "'",
+            "\u{201C}" => '"', "\u{201D}" => '"',
+            "\u{2013}" => '-', "\u{2014}" => '-',
+            "\u{00A0}" => ' ',     // non-breaking space
+            "\u{FEFF}" => '',      // byte-order mark
+        ]);
     }
 }

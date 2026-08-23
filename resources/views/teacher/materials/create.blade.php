@@ -23,6 +23,47 @@
             </div>
         @endif
 
+        {{-- ── Details ── --}}
+        <x-ui.card title="Details">
+            <div class="grid gap-4 sm:grid-cols-2">
+                <div class="sm:col-span-2">
+                    <x-ui.field label="Title" name="title" required>
+                        <input name="title" value="{{ old('title') }}" required
+                               class="w-full rounded-md border border-line bg-surface px-3 py-2 text-sm">
+                    </x-ui.field>
+                </div>
+
+                <x-ui.field label="Class" name="class_arm_id" hint="Leave blank to share with the whole school.">
+                    <select name="class_arm_id" class="w-full rounded-md border border-line bg-surface px-3 py-2 text-sm">
+                        <option value="">All classes</option>
+                        @foreach ($classes as $class)
+                            <option value="{{ $class->id }}" @selected(old('class_arm_id') === $class->id)>
+                                {{ $class->fullName() }}
+                            </option>
+                        @endforeach
+                    </select>
+                </x-ui.field>
+
+                <x-ui.field label="Subject" name="subject_id">
+                    <select name="subject_id" class="w-full rounded-md border border-line bg-surface px-3 py-2 text-sm">
+                        <option value="">No subject</option>
+                        @foreach ($subjects as $subject)
+                            <option value="{{ $subject->id }}" @selected(old('subject_id') === $subject->id)>
+                                {{ $subject->name }}
+                            </option>
+                        @endforeach
+                    </select>
+                </x-ui.field>
+
+                <div class="sm:col-span-2">
+                    <x-ui.field label="Description" name="description">
+                        <textarea name="description" rows="2"
+                                  class="w-full rounded-md border border-line bg-surface px-3 py-2 text-sm">{{ old('description') }}</textarea>
+                    </x-ui.field>
+                </div>
+            </div>
+        </x-ui.card>
+
         {{-- ── Source ── --}}
         <x-ui.card title="Source" subtitle="Where should the content come from?">
             <div class="space-y-4">
@@ -97,47 +138,6 @@
                     <textarea name="content" rows="5"
                               class="w-full rounded-md border border-line bg-surface px-3 py-2 text-sm"
                               placeholder="Optional: paste a transcript or summary…">{{ old('content') }}</textarea>
-                </div>
-            </div>
-        </x-ui.card>
-
-        {{-- ── Details ── --}}
-        <x-ui.card title="Details">
-            <div class="grid gap-4 sm:grid-cols-2">
-                <div class="sm:col-span-2">
-                    <x-ui.field label="Title" name="title" required>
-                        <input name="title" value="{{ old('title') }}" required
-                               class="w-full rounded-md border border-line bg-surface px-3 py-2 text-sm">
-                    </x-ui.field>
-                </div>
-
-                <x-ui.field label="Class" name="class_arm_id" hint="Leave blank to share with the whole school.">
-                    <select name="class_arm_id" class="w-full rounded-md border border-line bg-surface px-3 py-2 text-sm">
-                        <option value="">All classes</option>
-                        @foreach ($classes as $class)
-                            <option value="{{ $class->id }}" @selected(old('class_arm_id') === $class->id)>
-                                {{ $class->fullName() }}
-                            </option>
-                        @endforeach
-                    </select>
-                </x-ui.field>
-
-                <x-ui.field label="Subject" name="subject_id">
-                    <select name="subject_id" class="w-full rounded-md border border-line bg-surface px-3 py-2 text-sm">
-                        <option value="">No subject</option>
-                        @foreach ($subjects as $subject)
-                            <option value="{{ $subject->id }}" @selected(old('subject_id') === $subject->id)>
-                                {{ $subject->name }}
-                            </option>
-                        @endforeach
-                    </select>
-                </x-ui.field>
-
-                <div class="sm:col-span-2">
-                    <x-ui.field label="Description" name="description">
-                        <textarea name="description" rows="2"
-                                  class="w-full rounded-md border border-line bg-surface px-3 py-2 text-sm">{{ old('description') }}</textarea>
-                    </x-ui.field>
                 </div>
             </div>
         </x-ui.card>

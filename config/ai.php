@@ -87,4 +87,13 @@ return [
 
     'min_extractable_chars' => 200,
 
+    /*
+    | Upper bound on stored extracted text. We keep far more than we send to a
+    | model (see input_limits) so a material can be re-processed later, but a
+    | 900-page scan should not put megabytes into every row. LONGTEXT could
+    | hold it; there is just no use for it.
+    */
+
+    'max_extractable_chars' => 500000,
+
 ];

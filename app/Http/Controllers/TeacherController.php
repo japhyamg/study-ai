@@ -122,7 +122,7 @@ class TeacherController extends Controller
         $school = $this->school();
         $data = $request->validate([
             'title' => 'required|string|max:255',
-            'description' => 'nullable|string',
+            'description' => 'nullable|string|max:2000',
             'class_arm_id' => 'nullable|exists:class_arms,id',
             'duration_minutes' => 'nullable|integer|min:1',
             'pass_mark' => 'nullable|numeric|min:0|max:100',
@@ -164,7 +164,7 @@ class TeacherController extends Controller
         $this->authorize('update', $exam);
         $data = $request->validate([
             'title' => 'required|string|max:255',
-            'description' => 'nullable|string',
+            'description' => 'nullable|string|max:2000',
             'class_arm_id' => 'nullable|exists:class_arms,id',
             'duration_minutes' => 'nullable|integer|min:1',
             'pass_mark' => 'nullable|numeric|min:0|max:100',
@@ -304,7 +304,7 @@ class TeacherController extends Controller
 
         $data = $request->validate([
             'title' => 'required|string|max:255',
-            'description' => 'nullable|string',
+            'description' => 'nullable|string|max:2000',
             'type' => 'nullable|in:note,pdf,pptx,youtube,video,doc,link,url',
             'content' => 'nullable|string',
             'source_url' => 'nullable|url',
@@ -417,7 +417,7 @@ class TeacherController extends Controller
         $this->authorize('update', $material);
         $data = $request->validate([
             'title' => 'required|string|max:255',
-            'description' => 'nullable|string',
+            'description' => 'nullable|string|max:2000',
             'content' => 'nullable|string',
             'source_url' => 'nullable|url',
             'class_arm_id' => 'nullable|exists:class_arms,id',
