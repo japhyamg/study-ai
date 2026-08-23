@@ -97,9 +97,6 @@ final class Navigation
                 self::link('Exams', 'teacher.exams.index', 'clipboard', 'teacher.exams.*'),
                 self::link('Question bank', 'teacher.question-bank.index', 'database', 'teacher.question-bank.*'),
             ],
-            'Account' => [
-                self::link('AI usage', 'teacher.token-usage', 'gauge'),
-            ],
         ];
     }
 

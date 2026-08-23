@@ -6,6 +6,7 @@ use App\Models\PlatformSetting;
 use App\Models\TeacherTokenLimit;
 use App\Models\TokenUsage;
 use Exception;
+use Illuminate\Support\Facades\Cache;
 
 class TokenLimitError extends Exception
 {
@@ -42,6 +43,32 @@ class TokenLimitService
             ['key' => self::PLATFORM_LIMIT_KEY],
             ['value' => (string) $safe]
         );
+    }
+
+    /** Cache key for the topbar indicator's copy of the figures. */
+    private function cacheKey(string $userId): string
+    {
+        return 'token-limit:'.$userId.':'.now()->format('Y-m');
+    }
+
+    /**
+     * Same figures as {@see getTeacherTokenLimit()}, cached briefly.
+     *
+     * The topbar indicator renders on every page load, and the uncached path is
+     * three queries including a SUM over the month. Sixty seconds of staleness
+     * is invisible in a progress bar, and {@see forget()} clears it the moment
+     * tokens are actually spent, so the number never looks stuck after a
+     * generation.
+     */
+    public function getTeacherTokenLimitCached(string $userId): array
+    {
+        return Cache::remember($this->cacheKey($userId), 60, fn () => $this->getTeacherTokenLimit($userId));
+    }
+
+    /** Drop the cached figures — call after recording spend or changing a limit. */
+    public function forget(string $userId): void
+    {
+        Cache::forget($this->cacheKey($userId));
     }
 
     public function getTeacherTokenLimit(string $userId): array
@@ -98,6 +125,8 @@ class TokenLimitService
         if ($isEnabled !== null) {
             $updates['is_enabled'] = $isEnabled;
         }
+
+        $this->forget($userId);
 
         $existing = TeacherTokenLimit::where('user_id', $userId)->first();
         if ($existing) {

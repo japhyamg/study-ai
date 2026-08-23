@@ -490,6 +490,11 @@ SOURCE (JSON: sections[] with h = heading, t = text):
                 'total_tokens' => $promptTokens + $completionTokens,
                 'cost' => ($promptTokens * 0.00008 + $completionTokens * 0.00008) / 1000,
             ]);
+            // The topbar meter caches these figures; clear them so the number
+            // moves as soon as the teacher's own generation finishes.
+            if ($userId = $context['userId'] ?? null) {
+                app(TokenLimitService::class)->forget($userId);
+            }
         } catch (Throwable $e) {
             // token usage tracking is best-effort
         }

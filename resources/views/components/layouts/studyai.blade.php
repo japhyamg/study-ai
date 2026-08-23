@@ -161,6 +161,13 @@
             @endisset
 
             <div class="flex items-center gap-1">
+                {{-- AI allowance. Only for people who can spend it: students
+                     generate nothing, and platform staff are not on a school
+                     allowance. --}}
+                @if (! $isPlatform && in_array($role, [SchoolMember::ROLE_TEACHER, SchoolMember::ROLE_ADMIN], true))
+                    <x-token-meter :user="$user" />
+                @endif
+
                 {{-- Theme --}}
                 <button type="button"
                         class="btn btn-ghost btn-icon"
