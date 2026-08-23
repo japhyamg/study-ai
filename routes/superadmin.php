@@ -59,8 +59,8 @@ Route::middleware(['auth:superadmin', '2fa'])->group(function () {
     // AI providers
     Route::get('ai-providers', [SuperAdminController::class, 'aiProviders'])->name('ai-providers');
     Route::post('ai-providers', [SuperAdminController::class, 'storeAiProvider'])->name('ai-providers.store');
-    Route::put('ai-providers/{ai_provider}', [SuperAdminController::class, 'updateAiProvider'])->name('ai-providers.update');
-    Route::delete('ai-providers/{ai_provider}', [SuperAdminController::class, 'destroyAiProvider'])->name('ai-providers.destroy');
+    Route::put('ai-providers/{provider}', [SuperAdminController::class, 'updateAiProvider'])->name('ai-providers.update');
+    Route::delete('ai-providers/{provider}', [SuperAdminController::class, 'destroyAiProvider'])->name('ai-providers.destroy');
 
     // Token governance
     Route::get('token-limits', [SuperAdminController::class, 'tokenLimits'])->name('token-limits');
