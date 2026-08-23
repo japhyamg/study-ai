@@ -10,12 +10,16 @@ use App\Models\School;
 use App\Models\SchoolMember;
 use App\Models\Subject;
 use App\Models\User;
+use App\Services\People\PersonImporter;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\View\View;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 use Illuminate\Validation\Rule;
 
 class AdminController extends Controller
@@ -177,12 +181,7 @@ class AdminController extends Controller
     public function showUser(User $user): View
     {
         $school = $this->school();
-
-        $membership = SchoolMember::where('school_id', $school?->id)
-            ->where('user_id', $user->id)
-            ->first();
-
-        abort_unless($membership !== null, 404);
+        $membership = $this->membershipFor($user);
 
         $user->load(['adminProfile', 'teacherProfile', 'studentProfile']);
 
@@ -217,12 +216,7 @@ class AdminController extends Controller
     public function updateUser(Request $request, User $user): RedirectResponse
     {
         $school = $this->school();
-
-        $membership = SchoolMember::where('school_id', $school?->id)
-            ->where('user_id', $user->id)
-            ->first();
-
-        abort_unless($membership !== null, 404);
+        $membership = $this->membershipFor($user);
 
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
@@ -443,6 +437,205 @@ class AdminController extends Controller
             'login' => $isStudent ? $data['admission_number'] : $data['email'],
             'password' => $password,
         ]);
+    }
+
+    public function importForm(string $role): View
+    {
+        abort_unless(in_array($role, [SchoolMember::ROLE_TEACHER, SchoolMember::ROLE_STUDENT], true), 404);
+
+        return view('admin.people.import', [
+            'role' => $role,
+            'heading' => $role === SchoolMember::ROLE_TEACHER ? 'Import teachers' : 'Import students',
+            'columns' => PersonImporter::COLUMNS[$role],
+            'samples' => PersonImporter::SAMPLES[$role],
+        ]);
+    }
+
+    /**
+     * The blank file to fill in.
+     *
+     * It ships with two example rows so the expected shape of an admission
+     * number or a class name is visible rather than described.
+     */
+    public function importTemplate(string $role): StreamedResponse
+    {
+        abort_unless(in_array($role, [SchoolMember::ROLE_TEACHER, SchoolMember::ROLE_STUDENT], true), 404);
+
+        $columns = PersonImporter::COLUMNS[$role];
+        $samples = PersonImporter::SAMPLES[$role];
+
+        return response()->streamDownload(function () use ($columns, $samples) {
+            $out = fopen('php://output', 'w');
+
+            // Excel reads a plain UTF-8 CSV as the local codepage and mangles
+            // accented names; the BOM makes it read as UTF-8.
+            fwrite($out, "\xEF\xBB\xBF");
+
+            fputcsv($out, $columns);
+
+            foreach ($samples as $row) {
+                fputcsv($out, $row);
+            }
+
+            fclose($out);
+        }, $role.'-import-template.csv', [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+        ]);
+    }
+
+    public function importPeople(Request $request, PersonImporter $importer): RedirectResponse
+    {
+        $role = $request->input('role');
+
+        abort_unless(in_array($role, [SchoolMember::ROLE_TEACHER, SchoolMember::ROLE_STUDENT], true), 404);
+
+        $request->validate([
+            'file' => ['required', 'file', 'mimes:csv,txt', 'max:2048'],
+        ], [
+            'file.mimes' => 'Upload a CSV file. Export from Excel with Save As → CSV.',
+        ]);
+
+        $school = $this->school();
+
+        abort_unless($school !== null, 404);
+
+        $result = $importer->import($request->file('file')->getRealPath(), $role, $school);
+
+        if ($result['errors'] !== []) {
+            return back()->with('import_errors', $result['errors']);
+        }
+
+        $listRoute = $role === SchoolMember::ROLE_TEACHER ? 'admin.teachers' : 'admin.students';
+
+        return redirect()->route($listRoute)
+            ->with('status', $result['created'].' '.Str::plural('person', $result['created']).' imported.');
+    }
+
+    /**
+     * Issue a new password for someone.
+     *
+     * Shown once rather than emailed: there is no mail configured, and an
+     * admin resetting a password is usually standing next to the person.
+     */
+    public function resetPassword(Request $request, User $user): RedirectResponse
+    {
+        $this->membershipFor($user);
+
+        $data = $request->validate([
+            'password' => ['nullable', 'string', 'min:8'],
+        ]);
+
+        $password = $data['password'] ?? Str::password(12, symbols: false);
+
+        $user->update(['password' => Hash::make($password)]);
+
+        return back()->with('credentials', [
+            'name' => $user->name,
+            'login' => $user->email ?: $user->studentProfile?->admission_number,
+            'password' => $password,
+        ]);
+    }
+
+    /**
+     * Sign in as one of your own teachers or students.
+     *
+     * Used to see exactly what they see when something is reported. Admins are
+     * excluded as targets: impersonating a peer is a privilege grab, not
+     * support, and there is nothing about an admin's view worth reproducing
+     * that the acting admin cannot already reach.
+     */
+    public function impersonate(Request $request, User $user): RedirectResponse
+    {
+        $membership = $this->membershipFor($user);
+        $admin = $request->user();
+
+        if ($user->id === $admin->id) {
+            return back()->withErrors(['member' => 'You are already yourself.']);
+        }
+
+        if ($membership->role === SchoolMember::ROLE_ADMIN) {
+            return back()->withErrors(['member' => 'Administrators cannot be impersonated.']);
+        }
+
+        if (! $user->is_active) {
+            return back()->withErrors(['member' => 'This account is deactivated.']);
+        }
+
+        // Keep the *original* admin if one is already stashed, so a second hop
+        // cannot strand someone as a student with no way back.
+        $originalId = $request->session()->get('admin_impersonator_id', $admin->id);
+
+        Log::warning('Admin impersonation started', [
+            'admin_id' => $originalId,
+            'target_user_id' => $user->id,
+            'school_id' => $membership->school_id,
+            'ip' => $request->ip(),
+        ]);
+
+        Auth::guard('web')->login($user);
+
+        // Regenerate before writing the marker: the identity behind the session
+        // has changed, and the old id must not remain valid.
+        $request->session()->regenerate();
+        $request->session()->put('admin_impersonator_id', $originalId);
+
+        $home = $membership->role === SchoolMember::ROLE_TEACHER
+            ? 'teacher.dashboard'
+            : 'student.dashboard';
+
+        return redirect()->route($home)
+            ->with('status', 'You are now signed in as '.$user->name.'.');
+    }
+
+    /**
+     * Delete a person and everything owned by their account.
+     *
+     * Distinct from removing them from the school, which keeps the user row.
+     */
+    public function destroyUser(Request $request, User $user): RedirectResponse
+    {
+        $membership = $this->membershipFor($user);
+
+        if ($user->id === $request->user()->id) {
+            return back()->withErrors(['member' => 'You cannot delete your own account.']);
+        }
+
+        if ($membership->role === SchoolMember::ROLE_ADMIN) {
+            $admins = SchoolMember::where('school_id', $membership->school_id)
+                ->where('role', SchoolMember::ROLE_ADMIN)
+                ->count();
+
+            if ($admins <= 1) {
+                return back()->withErrors(['member' => 'This is the only administrator.']);
+            }
+        }
+
+        $listRoute = match ($membership->role) {
+            SchoolMember::ROLE_TEACHER => 'admin.teachers',
+            SchoolMember::ROLE_STUDENT => 'admin.students',
+            default => 'admin.administrators',
+        };
+
+        $user->delete();
+
+        return redirect()->route($listRoute)->with('status', 'Account deleted.');
+    }
+
+    /**
+     * The membership tying a user to this school, or 404.
+     *
+     * Route binding resolves any uuid, so every per-user action goes through
+     * here rather than trusting the bound model.
+     */
+    private function membershipFor(User $user): SchoolMember
+    {
+        $membership = SchoolMember::where('school_id', $this->school()?->id)
+            ->where('user_id', $user->id)
+            ->first();
+
+        abort_unless($membership !== null, 404);
+
+        return $membership;
     }
 
     public function removeMember(Request $request, SchoolMember $member): RedirectResponse

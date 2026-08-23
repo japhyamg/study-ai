@@ -75,6 +75,10 @@ Route::middleware(['auth', 'school.user', '2fa'])->group(function () {
 
     // Leave an impersonation session started by platform staff
     Route::post('stop-impersonating', [ImpersonationController::class, 'stop'])->name('impersonate.stop');
+    // Exiting must work while signed in as the impersonated teacher or student,
+    // so it cannot sit behind AdminController's role middleware.
+    Route::post('stop-admin-impersonating', [ImpersonationController::class, 'stopAdminImpersonation'])
+        ->name('admin.impersonate.stop');
 });
 
 /*
@@ -133,6 +137,12 @@ Route::middleware(['auth', 'school.user', '2fa', 'role:admin'])
         Route::get('teachers', [AdminController::class, 'teachers'])->name('teachers');
         Route::get('students', [AdminController::class, 'students'])->name('students');
         Route::get('administrators', [AdminController::class, 'administrators'])->name('administrators');
+        // Declared before people/{user}: a wildcard segment would otherwise
+        // match "import" and try to resolve it as a user id.
+        Route::get('people/import/{role}', [AdminController::class, 'importForm'])->name('people.import');
+        Route::get('people/import/{role}/template', [AdminController::class, 'importTemplate'])->name('people.import.template');
+        Route::post('people/import', [AdminController::class, 'importPeople'])->name('people.import.store');
+
         Route::get('people/{user}', [AdminController::class, 'showUser'])->name('people.show');
         Route::put('people/{user}', [AdminController::class, 'updateUser'])->name('people.update');
         // People are added directly, each role through its own form.
@@ -140,6 +150,9 @@ Route::middleware(['auth', 'school.user', '2fa', 'role:admin'])
         Route::get('students/new', [AdminController::class, 'createStudent'])->name('students.create');
         Route::get('administrators/new', [AdminController::class, 'createAdministrator'])->name('administrators.create');
         Route::post('people', [AdminController::class, 'storePerson'])->name('people.store');
+        Route::put('people/{user}/password', [AdminController::class, 'resetPassword'])->name('people.password');
+        Route::post('people/{user}/impersonate', [AdminController::class, 'impersonate'])->name('people.impersonate');
+        Route::delete('people/{user}', [AdminController::class, 'destroyUser'])->name('people.destroy');
         Route::delete('members/{member}', [AdminController::class, 'removeMember'])->name('members.remove');
         Route::put('members/{member}', [AdminController::class, 'updateMemberRole'])->name('members.role');
 

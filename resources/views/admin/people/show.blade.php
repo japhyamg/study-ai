@@ -23,6 +23,28 @@
 <x-layouts.studyai :title="$user->name" :subtitle="$roleLabels[$membership->role] ?? $membership->role"
                    :back-to="$backTo" :back-label="$backLabel">
 
+    {{-- Shown once after a reset: there is no mail set up, so the admin hands
+         the password over themselves. --}}
+    @if (session('credentials'))
+        @php $c = session('credentials'); @endphp
+        <div class="alert-info mb-5">
+            <p class="font-medium">New password for {{ $c['name'] }}.</p>
+            <p class="mt-1 text-sm">
+                Sign in with <span class="font-medium">{{ $c['login'] }}</span>
+                and password <span class="font-mono font-medium">{{ $c['password'] }}</span>.
+            </p>
+            <p class="mt-1 text-xs">This is not shown again.</p>
+        </div>
+    @endif
+
+    @if ($errors->any())
+        <div class="alert-danger mb-5">
+            <ul class="list-disc ps-4">
+                @foreach ($errors->all() as $error)<li>{{ $error }}</li>@endforeach
+            </ul>
+        </div>
+    @endif
+
     <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {{-- ── Editable details ── --}}
         <div class="lg:col-span-2">
@@ -75,16 +97,72 @@
                     </div>
                 </form>
 
-                <div class="mt-4 flex items-center justify-between border-t border-line pt-4">
-                    <p class="text-xs text-faint">
-                        Removing takes them out of this school. Their work stays.
-                    </p>
+            </div>
 
-                    <form method="POST" action="{{ route('admin.members.remove', $membership) }}"
-                          onsubmit="return confirm('Remove {{ $user->name }} from the school?')">
-                        @csrf @method('DELETE')
-                        <button type="submit" class="text-xs text-danger hover:underline">Remove</button>
-                    </form>
+            {{-- ── Account actions ── --}}
+            <div class="surface mt-6 p-5">
+                <p class="mb-4 text-sm font-medium text-ink">Account</p>
+
+                <div class="space-y-4">
+                    <div class="flex flex-wrap items-center justify-between gap-3">
+                        <div class="min-w-0">
+                            <p class="text-sm text-ink">Reset password</p>
+                            <p class="text-xs text-faint">
+                                Issues a new one and shows it once so you can pass it on.
+                            </p>
+                        </div>
+
+                        <form method="POST" action="{{ route('admin.people.password', $user) }}"
+                              onsubmit="return confirm('Issue a new password for {{ $user->name }}?')">
+                            @csrf @method('PUT')
+                            <x-ui.button type="submit" variant="ghost" size="sm">Reset</x-ui.button>
+                        </form>
+                    </div>
+
+                    @if ($membership->role !== 'admin')
+                        <div class="flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4">
+                            <div class="min-w-0">
+                                <p class="text-sm text-ink">Sign in as {{ $user->name }}</p>
+                                <p class="text-xs text-faint">
+                                    See exactly what they see. A banner stays up until you stop.
+                                </p>
+                            </div>
+
+                            <form method="POST" action="{{ route('admin.people.impersonate', $user) }}"
+                                  onsubmit="return confirm('Sign in as {{ $user->name }}?')">
+                                @csrf
+                                <x-ui.button type="submit" variant="ghost" size="sm">Impersonate</x-ui.button>
+                            </form>
+                        </div>
+                    @endif
+
+                    <div class="flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4">
+                        <div class="min-w-0">
+                            <p class="text-sm text-ink">Remove from school</p>
+                            <p class="text-xs text-faint">Keeps the account; drops their place here.</p>
+                        </div>
+
+                        <form method="POST" action="{{ route('admin.members.remove', $membership) }}"
+                              onsubmit="return confirm('Remove {{ $user->name }} from the school?')">
+                            @csrf @method('DELETE')
+                            <button type="submit" class="text-xs text-danger hover:underline">Remove</button>
+                        </form>
+                    </div>
+
+                    <div class="flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4">
+                        <div class="min-w-0">
+                            <p class="text-sm text-ink">Delete account</p>
+                            <p class="text-xs text-faint">
+                                Permanent. Their work goes with it.
+                            </p>
+                        </div>
+
+                        <form method="POST" action="{{ route('admin.people.destroy', $user) }}"
+                              onsubmit="return confirm('Delete {{ $user->name }} permanently? This cannot be undone.')">
+                            @csrf @method('DELETE')
+                            <button type="submit" class="text-xs text-danger hover:underline">Delete</button>
+                        </form>
+                    </div>
                 </div>
             </div>
 

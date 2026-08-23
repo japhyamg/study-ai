@@ -14,6 +14,12 @@
 
 <x-layouts.studyai :title="$heading">
     <x-slot:actions>
+        {{-- Administrators are added one at a time; there are never enough of
+             them to be worth a spreadsheet. --}}
+        @if ($role !== 'admin')
+            <x-ui.button :href="route('admin.people.import', $role)" variant="ghost">Import</x-ui.button>
+        @endif
+
         <x-ui.button :href="route($createRoute)" icon="plus">{{ $addLabel }}</x-ui.button>
     </x-slot:actions>
 

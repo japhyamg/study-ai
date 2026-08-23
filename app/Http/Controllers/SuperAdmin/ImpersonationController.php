@@ -44,6 +44,45 @@ class ImpersonationController extends Controller
             ->with('status', 'You are now viewing '.$school->name.' as '.$user->name.'.');
     }
 
+    /**
+     * Return an admin to their own account.
+     *
+     * Separate from stop(): platform staff sign out of the school entirely,
+     * whereas a school admin is logged back in as themselves. It carries no
+     * role middleware because the person calling it is currently signed in as
+     * the teacher or student being impersonated.
+     */
+    public function stopAdminImpersonation(Request $request): RedirectResponse
+    {
+        $adminId = $request->session()->pull('admin_impersonator_id');
+
+        abort_unless($adminId, 403);
+
+        $admin = User::find($adminId);
+
+        if (! $admin) {
+            Auth::guard('web')->logout();
+            $request->session()->invalidate();
+            $request->session()->regenerateToken();
+
+            return redirect()->route('login');
+        }
+
+        Log::info('Admin impersonation ended', [
+            'admin_id' => $admin->id,
+            'target_user_id' => $request->user()?->id,
+            'ip' => $request->ip(),
+        ]);
+
+        Auth::guard('web')->login($admin);
+
+        // The identity behind the session changed, so the id must not carry over.
+        $request->session()->regenerate();
+
+        return redirect()->route('admin.dashboard')
+            ->with('status', 'You are back as yourself.');
+    }
+
     public function stop(Request $request): RedirectResponse
     {
         abort_unless($request->session()->has('impersonator_id'), 403);

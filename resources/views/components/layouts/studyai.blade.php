@@ -257,8 +257,8 @@
 
                         <div class="menu-sep"></div>
 
-                        @if (session('impersonator_id'))
-                            <form method="POST" action="{{ route('impersonate.stop') }}">
+                        @if (session('impersonator_id') || session('admin_impersonator_id'))
+                            <form method="POST" action="{{ session('admin_impersonator_id') ? route('admin.impersonate.stop') : route('impersonate.stop') }}">
                                 @csrf
                                 <button type="submit" class="menu-item" role="menuitem">
                                     <x-icon name="logout" /> Stop impersonating
@@ -277,15 +277,22 @@
             </div>
         </header>
 
-        {{-- Impersonation banner --}}
-        @if (session('impersonator_id'))
+        {{-- Impersonation banner. Platform staff and a school admin both end up
+             here, but they leave by different doors: staff sign out of the
+             school, an admin returns to their own account. --}}
+        @if (session('impersonator_id') || session('admin_impersonator_id'))
+            @php $byAdmin = (bool) session('admin_impersonator_id'); @endphp
+
             <div class="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 border-b border-warning/25 bg-warning-soft px-4 py-2 text-xs text-warning">
                 <span class="font-medium">
-                    Support session — you are signed in as {{ $user?->name }}.
+                    {{ $byAdmin ? 'You are signed in as' : 'Support session — you are signed in as' }}
+                    {{ $user?->name }}.
                 </span>
-                <form method="POST" action="{{ route('impersonate.stop') }}">
+                <form method="POST" action="{{ $byAdmin ? route('admin.impersonate.stop') : route('impersonate.stop') }}">
                     @csrf
-                    <button class="font-semibold underline underline-offset-2">Exit</button>
+                    <button class="font-semibold underline underline-offset-2">
+                        {{ $byAdmin ? 'Back to my account' : 'Exit' }}
+                    </button>
                 </form>
             </div>
         @endif
