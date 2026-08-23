@@ -99,20 +99,39 @@ class TeacherController extends Controller
     // ── Exams ──
     public function exams(Request $request): View
     {
-        $user = auth()->user();
         $school = $this->school();
-        $query = Exam::with(['classArm', 'questions'])
-            ->where('school_id', $school?->id)
-            ->orderBy('created_at', 'desc');
 
         $status = $request->get('status');
-        if (in_array($status, [Exam::STATUS_DRAFT, Exam::STATUS_PUBLISHED, Exam::STATUS_ARCHIVED])) {
-            $query->where('status', $status);
-        }
+        $status = in_array($status, [
+            Exam::STATUS_DRAFT, Exam::STATUS_PUBLISHED, Exam::STATUS_ARCHIVED,
+        ], true) ? $status : null;
 
-        $exams = $query->paginate(20)->withQueryString();
+        // Counts, not the rows themselves: the list only shows how many
+        // questions an exam has, and hydrating every question to count them
+        // was both wasteful and broken, since questions_count was never set.
+        $exams = Exam::query()
+            ->with(['classArm.classLevel', 'subject'])
+            ->withCount(['questions', 'attempts' => fn ($q) => $q->where('submitted', true)])
+            ->where('school_id', $school?->id)
+            ->when($status, fn ($q) => $q->where('status', $status))
+            ->orderByDesc('created_at')
+            ->paginate(20)
+            ->withQueryString();
 
-        return view('teacher.exams.index', compact('exams', 'status'));
+        // Tab counts, so the filter says how much sits behind it.
+        $counts = Exam::where('school_id', $school?->id)
+            ->selectRaw('status, count(*) as total')
+            ->groupBy('status')
+            ->pluck('total', 'status');
+
+        $tabs = [
+            '' => ['label' => 'All', 'count' => $counts->sum()],
+            Exam::STATUS_DRAFT => ['label' => 'Drafts', 'count' => $counts[Exam::STATUS_DRAFT] ?? 0],
+            Exam::STATUS_PUBLISHED => ['label' => 'Published', 'count' => $counts[Exam::STATUS_PUBLISHED] ?? 0],
+            Exam::STATUS_ARCHIVED => ['label' => 'Archived', 'count' => $counts[Exam::STATUS_ARCHIVED] ?? 0],
+        ];
+
+        return view('teacher.exams.index', compact('exams', 'status', 'tabs'));
     }
 
     public function createExam(Request $request): View

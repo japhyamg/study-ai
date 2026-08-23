@@ -7,6 +7,7 @@ use App\Models\ClassLevel;
 use App\Models\ClassSubjectAssignment;
 use App\Models\Exam;
 use App\Models\ExamAttempt;
+use App\Models\ExamQuestion;
 use App\Models\School;
 use App\Models\SchoolMember;
 use App\Models\Subject;
@@ -391,6 +392,102 @@ class ExamSettingsTest extends TestCase
             ->assertSee('title="Delete exam"', false)
             // Every exam page needs a way back to the list.
             ->assertSee(route('teacher.exams.index'), false);
+    }
+
+    public function test_the_list_shows_a_real_question_count(): void
+    {
+        $exam = Exam::create([
+            'school_id' => $this->school->id,
+            'title' => 'Mid-term',
+            'status' => Exam::STATUS_DRAFT,
+            'created_by' => $this->mathsTeacher->id,
+        ]);
+
+        foreach (range(1, 3) as $i) {
+            ExamQuestion::create([
+                'exam_id' => $exam->id,
+                'question' => "Question {$i}",
+                'type' => 'mcq',
+                'options' => ['A', 'B'],
+                'answer' => 'A',
+                'points' => 1,
+                'order' => $i,
+            ]);
+        }
+
+        // questions_count was never loaded, so the column rendered blank.
+        $this->actingAs($this->mathsTeacher)
+            ->get(route('teacher.exams.index'))
+            ->assertOk()
+            ->assertSee('>3<', false)
+            ->assertSee('questions');
+    }
+
+    public function test_the_list_counts_only_submitted_attempts(): void
+    {
+        $exam = Exam::create([
+            'school_id' => $this->school->id,
+            'title' => 'Mid-term',
+            'status' => Exam::STATUS_PUBLISHED,
+            'created_by' => $this->mathsTeacher->id,
+        ]);
+
+        $student = $this->user('sat2@test.test', SchoolMember::ROLE_STUDENT);
+
+        ExamAttempt::create([
+            'exam_id' => $exam->id, 'user_id' => $student->id,
+            'submitted' => true, 'answers' => [],
+        ]);
+
+        ExamAttempt::create([
+            'exam_id' => $exam->id, 'user_id' => $student->id,
+            'submitted' => false, 'answers' => [],
+        ]);
+
+        $this->actingAs($this->mathsTeacher)
+            ->get(route('teacher.exams.index'))
+            ->assertOk()
+            // One sat it; the abandoned attempt is not a result.
+            ->assertSee('>1<', false)
+            ->assertSee('student');
+    }
+
+    public function test_the_status_filter_narrows_the_list(): void
+    {
+        Exam::create([
+            'school_id' => $this->school->id,
+            'title' => 'A draft exam',
+            'status' => Exam::STATUS_DRAFT,
+            'created_by' => $this->mathsTeacher->id,
+        ]);
+
+        Exam::create([
+            'school_id' => $this->school->id,
+            'title' => 'A published exam',
+            'status' => Exam::STATUS_PUBLISHED,
+            'created_by' => $this->mathsTeacher->id,
+        ]);
+
+        $this->actingAs($this->mathsTeacher)
+            ->get(route('teacher.exams.index', ['status' => 'published']))
+            ->assertOk()
+            ->assertSee('A published exam')
+            ->assertDontSee('A draft exam');
+    }
+
+    public function test_an_unknown_status_filter_is_ignored(): void
+    {
+        Exam::create([
+            'school_id' => $this->school->id,
+            'title' => 'A draft exam',
+            'status' => Exam::STATUS_DRAFT,
+            'created_by' => $this->mathsTeacher->id,
+        ]);
+
+        $this->actingAs($this->mathsTeacher)
+            ->get(route('teacher.exams.index', ['status' => 'nonsense']))
+            ->assertOk()
+            ->assertSee('A draft exam');
     }
 
     public function test_the_create_and_edit_pages_link_back(): void
