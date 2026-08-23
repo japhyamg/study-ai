@@ -171,17 +171,77 @@ class ExamSettingsTest extends TestCase
             ->assertDontSee('Chemistry');
     }
 
-    public function test_unenforced_settings_are_not_offered_as_dead_switches(): void
+    public function test_negative_marking_is_not_offered_because_nothing_applies_it(): void
     {
-        $response = $this->actingAs($this->mathsTeacher)
+        $this->actingAs($this->mathsTeacher)
             ->get(route('teacher.exams.create'))
-            ->assertOk();
+            ->assertOk()
+            ->assertDontSee('name="negative_marking"', false);
+    }
 
-        // Nothing reads these columns yet, so showing them would promise
-        // behaviour the exam runner does not deliver.
-        $response->assertDontSee('name="shuffle_questions"', false);
-        $response->assertDontSee('name="shuffle_options"', false);
-        $response->assertDontSee('name="negative_marking"', false);
+    public function test_the_availability_window_is_saved(): void
+    {
+        $this->actingAs($this->mathsTeacher)
+            ->post(route('teacher.exams.store'), [
+                'title' => 'Scheduled',
+                'start_time' => '2026-09-01T09:00',
+                'end_time' => '2026-09-01T11:00',
+            ])->assertRedirect();
+
+        $exam = Exam::where('title', 'Scheduled')->first();
+
+        $this->assertSame('2026-09-01 09:00', $exam->start_time->format('Y-m-d H:i'));
+        $this->assertSame('2026-09-01 11:00', $exam->end_time->format('Y-m-d H:i'));
+    }
+
+    public function test_the_window_cannot_close_before_it_opens(): void
+    {
+        $this->actingAs($this->mathsTeacher)
+            ->post(route('teacher.exams.store'), [
+                'title' => 'Backwards',
+                'start_time' => '2026-09-01T11:00',
+                'end_time' => '2026-09-01T09:00',
+            ])->assertSessionHasErrors('end_time');
+
+        $this->assertDatabaseMissing('exams', ['title' => 'Backwards']);
+    }
+
+    public function test_shuffle_toggles_are_saved(): void
+    {
+        $this->actingAs($this->mathsTeacher)
+            ->post(route('teacher.exams.store'), [
+                'title' => 'Shuffled',
+                'shuffle_questions' => '1',
+                'shuffle_options' => '1',
+            ])->assertRedirect();
+
+        $exam = Exam::where('title', 'Shuffled')->first();
+
+        $this->assertTrue($exam->shuffle_questions);
+        $this->assertTrue($exam->shuffle_options);
+    }
+
+    public function test_unticking_a_shuffle_box_turns_it_off_again(): void
+    {
+        $exam = Exam::create([
+            'school_id' => $this->school->id,
+            'title' => 'Shuffled',
+            'status' => Exam::STATUS_DRAFT,
+            'created_by' => $this->mathsTeacher->id,
+            'shuffle_questions' => true,
+            'shuffle_options' => true,
+        ]);
+
+        // An unticked checkbox sends nothing at all, so the update has to write
+        // false rather than leave the old value in place.
+        $this->actingAs($this->mathsTeacher)
+            ->put(route('teacher.exams.update', $exam), ['title' => 'Shuffled'])
+            ->assertRedirect();
+
+        $exam->refresh();
+
+        $this->assertFalse($exam->shuffle_questions);
+        $this->assertFalse($exam->shuffle_options);
     }
 
     public function test_duration_is_bounded(): void

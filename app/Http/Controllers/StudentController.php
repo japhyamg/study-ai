@@ -9,6 +9,7 @@ use App\Models\ExamQuestion;
 use App\Models\Flashcard;
 use App\Models\Material;
 use App\Models\School;
+use App\Services\Learning\ExamPaperService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -172,6 +173,17 @@ class StudentController extends Controller
     {
         abort_unless($exam->status === Exam::STATUS_PUBLISHED, 403);
 
+        // The scheduling window, if the teacher set one.
+        if ($exam->start_time && $exam->start_time->isFuture()) {
+            return back()->withErrors([
+                'exam' => 'This exam opens '.$exam->start_time->format('j M Y, g:ia').'.',
+            ]);
+        }
+
+        if ($exam->end_time && $exam->end_time->isPast()) {
+            return back()->withErrors(['exam' => 'This exam has closed.']);
+        }
+
         // Respect max attempts
         $attempts = ExamAttempt::where('exam_id', $exam->id)->where('user_id', auth()->id())->where('submitted', true)->count();
         if ($exam->max_attempts && $attempts >= $exam->max_attempts) {
@@ -189,14 +201,16 @@ class StudentController extends Controller
         return redirect()->route('student.exams.take', [$exam, $attempt]);
     }
 
-    public function takeExam(Exam $exam, ExamAttempt $attempt): View
+    public function takeExam(Exam $exam, ExamAttempt $attempt, ExamPaperService $paper): View
     {
         abort_unless($attempt->user_id === auth()->id() && !$attempt->submitted, 403);
-        $questions = $exam->questions()->orderBy('order')->get();
+
+        $questions = $paper->questionsFor($exam, $attempt);
+
         return view('student.exam-take', compact('exam', 'attempt', 'questions'));
     }
 
-    public function submitExam(Request $request, Exam $exam, ExamAttempt $attempt): RedirectResponse
+    public function submitExam(Request $request, Exam $exam, ExamAttempt $attempt, ExamPaperService $paper): RedirectResponse
     {
         abort_unless($attempt->user_id === auth()->id() && !$attempt->submitted, 403);
 
@@ -207,12 +221,18 @@ class StudentController extends Controller
 
         foreach ($questions as $q) {
             $given = $request->input("q.{$q->id}");
-            $isCorrect = false;
-            if ($given !== null && (string) $given === (string) $q->answer) {
-                $isCorrect = true;
+            $given = is_string($given) ? $given : null;
+
+            $isCorrect = $paper->isCorrect($q, $given);
+
+            if ($isCorrect) {
                 $score += $q->points ?? 1;
             }
+
             $maxScore += $q->points ?? 1;
+
+            // Store the answer text, not a position: options may be shuffled
+            // per attempt, so an index would not survive review.
             $answers[] = [
                 'question_id' => $q->id,
                 'given' => $given,
@@ -236,11 +256,12 @@ class StudentController extends Controller
         return redirect()->route('student.exams.result', [$exam, $attempt]);
     }
 
-    public function examResult(Exam $exam, ExamAttempt $attempt): View
+    public function examResult(Exam $exam, ExamAttempt $attempt, ExamPaperService $paper): View
     {
         abort_unless($attempt->user_id === auth()->id(), 403);
         $questions = $exam->questions()->orderBy('order')->get();
-        return view('student.exam-result', compact('exam', 'attempt', 'questions'));
+
+        return view('student.exam-result', compact('exam', 'attempt', 'questions', 'paper'));
     }
 
     // ── Flashcards (SRS) ──

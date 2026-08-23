@@ -34,6 +34,18 @@ class QuestionBank extends Model
     const TYPE_SHORT_ANSWER = 'short_answer';
     const TYPE_ESSAY = 'essay';
 
+    /** Every question type the bank and exams accept. */
+    public static function types(): array
+    {
+        return [
+            self::TYPE_MCQ,
+            self::TYPE_TRUE_FALSE,
+            self::TYPE_FILL_BLANK,
+            self::TYPE_SHORT_ANSWER,
+            self::TYPE_ESSAY,
+        ];
+    }
+
     public function school(): BelongsTo { return $this->belongsTo(School::class); }
 
     public function subject(): BelongsTo { return $this->belongsTo(Subject::class); }

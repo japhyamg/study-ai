@@ -22,6 +22,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
@@ -180,12 +181,12 @@ class TeacherController extends Controller
     /**
      * Shared rules for creating and updating an exam.
      *
-     * Only settings the app actually enforces are accepted here: the duration
-     * drives the countdown in the exam runner, max_attempts is checked before a
-     * new attempt is created, and pass_mark decides the pass flag on submit.
-     * Settings that exist as columns but nothing reads yet (shuffling, negative
-     * marking, result visibility) are deliberately left out rather than shown
-     * as switches that quietly do nothing.
+     * Every setting accepted here is enforced somewhere: duration drives the
+     * countdown, max_attempts is checked before an attempt starts, pass_mark
+     * decides the pass flag, the start/end window gates entry, and the two
+     * shuffle flags are applied when the paper is built for an attempt.
+     *
+     * negative_marking is still left out — nothing applies it during grading.
      */
     private function validateExam(Request $request): array
     {
@@ -197,9 +198,17 @@ class TeacherController extends Controller
             'duration' => 'nullable|integer|min:1|max:600',
             'pass_mark' => 'nullable|numeric|min:0|max:100',
             'max_attempts' => 'nullable|integer|min:1|max:10',
-        ], [], [
+            'start_time' => 'nullable|date',
+            'end_time' => 'nullable|date|after:start_time',
+            'shuffle_questions' => 'nullable|boolean',
+            'shuffle_options' => 'nullable|boolean',
+        ], [
+            'end_time.after' => 'The closing time must be after the opening time.',
+        ], [
             'class_arm_id' => 'class',
             'duration' => 'duration',
+            'start_time' => 'opening time',
+            'end_time' => 'closing time',
         ]);
 
         // A teacher may only tie an exam to a subject they are assigned to,
@@ -213,6 +222,11 @@ class TeacherController extends Controller
 
         $data['pass_mark'] = $data['pass_mark'] ?? 50;
         $data['max_attempts'] = $data['max_attempts'] ?? 1;
+
+        // Unchecked boxes are absent from the payload entirely, so they have to
+        // be written as false rather than left untouched on update.
+        $data['shuffle_questions'] = $request->boolean('shuffle_questions');
+        $data['shuffle_options'] = $request->boolean('shuffle_options');
 
         return $data;
     }
@@ -253,27 +267,67 @@ class TeacherController extends Controller
     public function addQuestion(Request $request, Exam $exam): RedirectResponse
     {
         $this->authorize('update', $exam);
+
         $data = $request->validate([
             'question' => 'required|string',
-            'type' => 'required|string|max:50',
-            'options' => 'nullable|array',
+            'type' => ['required', Rule::in(QuestionBank::types())],
+            'options' => 'nullable|array|max:6',
+            'options.*' => 'nullable|string|max:500',
+            'correct_idx' => 'nullable|integer|min:0',
             'answer' => 'nullable|string',
             'explanation' => 'nullable|string',
-            'points' => 'nullable|numeric|min:0',
+            'difficulty' => 'nullable|integer|min:1|max:5',
+            'points' => 'nullable|numeric|min:0|max:100',
         ]);
+
+        // Same shaping the bank uses, so a question written here and one banked
+        // from a study guide are stored identically: answer as text, options
+        // trimmed of blanks, written types with no options at all.
+        $attributes = $this->bankAttributes($data);
 
         ExamQuestion::create([
             'exam_id' => $exam->id,
-            'question' => $data['question'],
-            'type' => $data['type'],
-            'options' => $data['options'] ?? null,
-            'answer' => $data['answer'] ?? null,
-            'explanation' => $data['explanation'] ?? null,
+            'question' => $attributes['question'],
+            'type' => $attributes['type'],
+            'options' => $attributes['options'],
+            'answer' => $attributes['answer'],
+            'explanation' => $attributes['explanation'],
             'points' => $data['points'] ?? 1,
-            'order' => $exam->questions()->count() + 1,
+            'order' => (int) $exam->questions()->max('order') + 1,
         ]);
 
         return back()->with('status', 'Question added.');
+    }
+
+    public function updateQuestion(Request $request, Exam $exam, ExamQuestion $question): RedirectResponse
+    {
+        $this->authorize('update', $exam);
+        abort_unless($question->exam_id === $exam->id, 404);
+
+        $data = $request->validate([
+            'question' => 'required|string',
+            'type' => ['required', Rule::in(QuestionBank::types())],
+            'options' => 'nullable|array|max:6',
+            'options.*' => 'nullable|string|max:500',
+            'correct_idx' => 'nullable|integer|min:0',
+            'answer' => 'nullable|string',
+            'explanation' => 'nullable|string',
+            'difficulty' => 'nullable|integer|min:1|max:5',
+            'points' => 'nullable|numeric|min:0|max:100',
+        ]);
+
+        $attributes = $this->bankAttributes($data);
+
+        $question->update([
+            'question' => $attributes['question'],
+            'type' => $attributes['type'],
+            'options' => $attributes['options'],
+            'answer' => $attributes['answer'],
+            'explanation' => $attributes['explanation'],
+            'points' => $data['points'] ?? $question->points,
+        ]);
+
+        return back()->with('status', 'Question updated.');
     }
 
     public function removeQuestion(Exam $exam, ExamQuestion $question): RedirectResponse
@@ -933,7 +987,7 @@ class TeacherController extends Controller
 
         $data = $request->validate([
             'question' => 'required|string|max:2000',
-            'type' => 'required|in:mcq,true_false,fill_blank,short_answer,essay',
+            'type' => ['required', Rule::in(QuestionBank::types())],
             'options' => 'nullable|array|max:6',
             'options.*' => 'nullable|string|max:1000',
             'correct_idx' => 'nullable|integer|min:0',
@@ -1035,7 +1089,7 @@ class TeacherController extends Controller
             // under nothing is invisible everywhere it would be used.
             'subject_id' => 'required|exists:subjects,id',
             'question' => 'required|string|max:2000',
-            'type' => 'required|in:mcq,true_false,fill_blank,short_answer,essay',
+            'type' => ['required', Rule::in(QuestionBank::types())],
             'options' => 'nullable|array|max:6',
             'options.*' => 'nullable|string|max:1000',
             'correct_idx' => 'nullable|integer|min:0',

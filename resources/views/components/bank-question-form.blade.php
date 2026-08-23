@@ -3,6 +3,8 @@
     'question' => null,
     'subject' => null,
     'method' => 'POST',
+    // Exam questions carry a mark; banked ones do not.
+    'showPoints' => false,
 ])
 
 @php
@@ -127,6 +129,13 @@
         <x-ui.field label="Explanation" name="explanation" hint="Optional. Shown after answering.">
             <textarea name="explanation" rows="2" class="textarea" x-model="form.explanation"></textarea>
         </x-ui.field>
+
+        @if ($showPoints)
+            <x-ui.field label="Points" name="points" hint="What this question is worth.">
+                <input type="number" name="points" step="0.5" min="0" max="100" class="input"
+                       value="{{ old('points', $question->points ?? 1) }}">
+            </x-ui.field>
+        @endif
     </div>
 
     <div class="mt-4 flex justify-end gap-2 border-t border-line pt-3">
