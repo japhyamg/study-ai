@@ -1,118 +1,129 @@
-<x-layouts.studyai title="Student Dashboard">
-    <h1 class="text-2xl font-bold text-ink mb-5" style="font-family: var(--font-display)">Welcome back, Student</h1>
+<x-layouts.studyai title="Dashboard" subtitle="Welcome back">
 
-    {{-- Stat cards --}}
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-        <div class="surface p-4">
-            <div class="flex items-center justify-between">
-                <span class="text-sm text-muted">Enrolled Classes</span>
-                <span class="text-muted">📖</span>
-            </div>
-            <div class="text-3xl font-bold text-ink mt-1" style="font-family: var(--font-display)">{{ $stats['classes'] }}</div>
-        </div>
-        <div class="surface p-4">
-            <div class="flex items-center justify-between">
-                <span class="text-sm text-muted">Flashcards Due</span>
-                <span class="text-muted">🗂️</span>
-            </div>
-            <div class="text-3xl font-bold text-ink mt-1" style="font-family: var(--font-display)">
-                <a href="{{ route('student.study.index') }}" class="hover:text-accent">{{ $stats['dueFlashcards'] }}</a>
-            </div>
-        </div>
-        <div class="surface p-4">
-            <div class="flex items-center justify-between">
-                <span class="text-sm text-muted">Upcoming Exams</span>
-                <span class="text-muted">📝</span>
-            </div>
-            <div class="text-3xl font-bold text-ink mt-1" style="font-family: var(--font-display)">{{ $stats['upcomingExams'] }}</div>
-        </div>
+    {{-- Stat cards. The .stat classes are the shared dashboard treatment, so
+         this reads the same as the teacher and admin screens. --}}
+    <div class="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <a href="{{ route('student.subjects') }}" class="stat block transition-colors hover:border-accent/40">
+            <div class="stat-label">Subjects</div>
+            <div class="stat-value">{{ $stats['subjects'] }}</div>
+            <div class="stat-meta">What you are taught</div>
+        </a>
+
+        <a href="{{ route('student.study.index') }}" class="stat block transition-colors hover:border-accent/40">
+            <div class="stat-label">Cards due</div>
+            <div class="stat-value">{{ $stats['dueFlashcards'] }}</div>
+            <div class="stat-meta">Ready to review</div>
+        </a>
+
+        <a href="{{ route('student.exams') }}" class="stat block transition-colors hover:border-accent/40">
+            <div class="stat-label">Upcoming exams</div>
+            <div class="stat-value">{{ $stats['upcomingExams'] }}</div>
+            <div class="stat-meta">Not yet taken</div>
+        </a>
     </div>
 
-    {{-- Published materials from teachers --}}
-    @if($publishedMaterials->isNotEmpty())
-    <div class="surface mb-6">
-        <div class="px-5 py-3 border-b flex items-center justify-between">
-            <span class="font-semibold text-ink">New From Your Teachers</span>
-            <a href="{{ route('student.materials') }}" class="text-xs text-accent">View all →</a>
-        </div>
-        <div class="grid gap-3 p-5 md:grid-cols-2 lg:grid-cols-3">
-            @foreach($publishedMaterials as $m)
-                <a href="{{ route('student.study.hub', $m) }}" class="border border-line p-4 block hover:border-accent transition-colors" style="border-radius:3px">
-                    <div class="font-medium text-ink">{{ $m->title }}</div>
-                    @if($m->subject)<div class="text-xs text-muted mt-0.5">{{ $m->subject->name }}</div>@endif
-                    <div class="text-xs text-faint mt-2">{{ $m->flashcards_count }} flashcards · {{ $m->questions_count }} questions</div>
-                    <div class="text-[11px] text-faint mt-1">Published {{ $m->published_at?->diffForHumans() ?? $m->created_at->diffForHumans() }}</div>
-                </a>
-            @endforeach
-        </div>
-    </div>
-    @endif
+    <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <div class="space-y-6 lg:col-span-2">
+            <x-ui.card title="Exams you can take" :padded="false">
+                <x-slot:actions>
+                    <a href="{{ route('student.exams') }}" class="text-xs text-accent">All exams</a>
+                </x-slot:actions>
 
-    {{-- Available exams --}}
-    <div class="surface mb-6">
-        <div class="px-5 py-3 border-b flex items-center justify-between">
-            <span class="font-semibold text-ink">Available Exams</span>
-            <a href="{{ route('student.exams') }}" class="text-xs text-accent">All exams →</a>
-        </div>
-        <ul class="divide-y text-sm px-5">
-            @forelse($availableExams->take(4) as $e)
-                <li class="py-2.5 flex items-center justify-between gap-3">
-                    <div>
-                        <div class="font-medium">{{ $e->title }}</div>
-                        <div class="text-xs text-faint">{{ $e->classRoom?->name ?? 'General' }} · {{ $e->questions_count }} questions</div>
+                @if ($availableExams->isEmpty())
+                    <div class="px-5 py-8 text-center text-sm text-faint">
+                        Nothing to sit right now.
                     </div>
-                    <form method="POST" action="{{ route('student.exams.start', $e) }}">@csrf<button class="px-3 py-1 btn btn-primary text-xs">Start</button></form>
-                </li>
-            @empty
-                <li class="py-2.5 text-faint">No exams available yet.</li>
-            @endforelse
-        </ul>
-    </div>
+                @else
+                    <ul class="divide-y divide-line">
+                        @foreach ($availableExams->take(5) as $exam)
+                            <li class="flex flex-wrap items-center justify-between gap-3 px-5 py-3">
+                                <div class="min-w-0">
+                                    <p class="text-sm font-medium text-ink">{{ $exam->title }}</p>
+                                    <p class="mt-0.5 text-xs text-faint">
+                                        {{ $exam->subject?->name ?? 'General' }}
+                                        · <span class="tnum">{{ $exam->questions_count }}</span>
+                                        {{ Str::plural('question', $exam->questions_count) }}
+                                    </p>
+                                </div>
 
-    {{-- Upcoming exams (source parity) --}}
-    @if($upcomingExams->isNotEmpty())
-    <div class="surface mb-6">
-        <div class="px-5 py-3 border-b font-semibold text-ink">Upcoming Exams</div>
-        <ul class="divide-y px-5 text-sm">
-            @foreach($upcomingExams as $e)
-                <li class="py-3 flex justify-between items-center">
-                    <span>{{ $e->title }}</span>
-                    <span class="text-xs text-muted">{{ $e->start_time?->format('M j, Y') ?? 'Anytime' }}{{ $e->duration ? ' · '.$e->duration.'min' : '' }}</span>
-                </li>
-            @endforeach
-        </ul>
-    </div>
-    @endif
+                                <form method="POST" action="{{ route('student.exams.start', $exam) }}">
+                                    @csrf
+                                    <x-ui.button type="submit" size="sm">Start</x-ui.button>
+                                </form>
+                            </li>
+                        @endforeach
+                    </ul>
+                @endif
+            </x-ui.card>
 
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {{-- Your classes --}}
-        @if($enrollments->isNotEmpty())
-        <div class="surface">
-            <div class="px-5 py-3 border-b font-semibold text-ink">Your Classes</div>
-            <div class="grid gap-3 p-5 md:grid-cols-2">
-                @foreach($enrollments as $en)
-                    <a href="{{ route('student.classes.show', $en) }}" class="p-4 border border-line block hover:border-accent transition-colors" style="border-radius:3px">
-                        <h3 class="font-medium text-ink">{{ $en->class?->name ?? 'Class' }}</h3>
-                        @if($en->class?->subject)<p class="text-sm text-muted">{{ $en->class->subject->name }}</p>@endif
-                    </a>
-                @endforeach
-            </div>
+            <x-ui.card title="Recent results" :padded="false">
+                @if ($recentAttempts->isEmpty())
+                    <div class="px-5 py-8 text-center text-sm text-faint">
+                        Nothing sat yet.
+                    </div>
+                @else
+                    <ul class="divide-y divide-line">
+                        @foreach ($recentAttempts as $attempt)
+                            <li class="flex flex-wrap items-center justify-between gap-3 px-5 py-3">
+                                <a href="{{ route('student.exams.result', [$attempt->exam, $attempt]) }}"
+                                   class="min-w-0 text-sm text-ink hover:text-accent">
+                                    {{ $attempt->exam?->title ?? 'Exam' }}
+                                </a>
+
+                                <span class="text-xs {{ $attempt->passed ? 'text-success' : 'text-danger' }}">
+                                    <span class="tnum">{{ $attempt->percentage }}</span>% ·
+                                    {{ $attempt->passed ? 'Passed' : 'Not passed' }}
+                                </span>
+                            </li>
+                        @endforeach
+                    </ul>
+                @endif
+            </x-ui.card>
         </div>
-        @endif
 
-        {{-- Recent results --}}
-        <div class="surface">
-            <div class="px-5 py-3 border-b font-semibold text-ink">Recent Results</div>
-            <ul class="divide-y text-sm px-5">
-                @forelse($recentAttempts as $a)
-                    <li class="py-2.5 flex items-center justify-between">
-                        <a href="{{ route('student.exams.result', [$a->exam, $a]) }}" class="hover:underline">{{ $a->exam->title }}</a>
-                        <span class="text-xs {{ $a->passed ? 'text-ok' : 'text-danger' }}">{{ $a->percentage }}% · {{ $a->passed ? 'Passed' : 'Failed' }}</span>
-                    </li>
-                @empty
-                    <li class="py-2.5 text-faint">No attempts yet.</li>
-                @endforelse
-            </ul>
+        <div class="space-y-6">
+            <x-ui.card title="Your subjects" :padded="false">
+                @if ($subjects->isEmpty())
+                    <div class="px-5 py-8 text-center text-sm text-faint">
+                        No subjects assigned yet.
+                    </div>
+                @else
+                    <ul class="divide-y divide-line">
+                        @foreach ($subjects as $assignment)
+                            <li>
+                                <a href="{{ route('student.subjects.show', $assignment->subject) }}"
+                                   class="flex items-center justify-between gap-3 px-5 py-3 transition-colors hover:bg-surface-sunk/50">
+                                    <div class="min-w-0">
+                                        <p class="truncate text-sm text-ink">{{ $assignment->subject->name }}</p>
+                                        @if ($assignment->teacher)
+                                            <p class="truncate text-xs text-faint">{{ $assignment->teacher->name }}</p>
+                                        @endif
+                                    </div>
+                                    <x-icon name="chevron-right" class="shrink-0 text-faint" />
+                                </a>
+                            </li>
+                        @endforeach
+                    </ul>
+                @endif
+            </x-ui.card>
+
+            @if ($upcomingExams->isNotEmpty())
+                <x-ui.card title="Coming up" :padded="false">
+                    <ul class="divide-y divide-line">
+                        @foreach ($upcomingExams as $exam)
+                            <li class="px-5 py-3">
+                                <p class="text-sm text-ink">{{ $exam->title }}</p>
+                                <p class="mt-0.5 text-xs text-faint">
+                                    {{ $exam->start_time?->format('j M Y') ?? 'Anytime' }}
+                                    @if ($exam->duration)
+                                        · {{ $exam->duration }} min
+                                    @endif
+                                </p>
+                            </li>
+                        @endforeach
+                    </ul>
+                </x-ui.card>
+            @endif
         </div>
     </div>
 </x-layouts.studyai>

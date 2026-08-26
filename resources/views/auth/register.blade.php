@@ -1,52 +1,34 @@
-<x-guest-layout>
-    <form method="POST" action="{{ route('register') }}">
+<x-guest-layout title="Create your account"
+                :description="($tenant?->name ?? 'Your school').' — join with an invite code'">
+
+    <form method="POST" action="{{ route('register') }}" class="space-y-4">
         @csrf
 
-        <!-- Name -->
-        <div>
-            <x-input-label for="name" :value="__('Name')" />
-            <x-text-input id="name" class="block mt-1 w-full" type="text" name="name" :value="old('name')" required autofocus autocomplete="name" />
-            <x-input-error :messages="$errors->get('name')" class="mt-2" />
-        </div>
+        <x-ui.field label="Full name" name="name" required>
+            <input id="name" name="name" type="text" class="input"
+                   value="{{ old('name') }}" required autofocus autocomplete="name">
+        </x-ui.field>
 
-        <!-- Email Address -->
-        <div class="mt-4">
-            <x-input-label for="email" :value="__('Email')" />
-            <x-text-input id="email" class="block mt-1 w-full" type="email" name="email" :value="old('email')" required autocomplete="username" />
-            <x-input-error :messages="$errors->get('email')" class="mt-2" />
-        </div>
+        <x-ui.field label="Email address" name="email" required>
+            <input id="email" name="email" type="email" class="input"
+                   value="{{ old('email') }}" required autocomplete="username">
+        </x-ui.field>
 
-        <!-- Password -->
-        <div class="mt-4">
-            <x-input-label for="password" :value="__('Password')" />
+        <x-ui.field label="Password" name="password" required hint="At least 8 characters.">
+            <input id="password" name="password" type="password" class="input"
+                   required autocomplete="new-password">
+        </x-ui.field>
 
-            <x-text-input id="password" class="block mt-1 w-full"
-                            type="password"
-                            name="password"
-                            required autocomplete="new-password" />
+        <x-ui.field label="Confirm password" name="password_confirmation" required>
+            <input id="password_confirmation" name="password_confirmation" type="password"
+                   class="input" required autocomplete="new-password">
+        </x-ui.field>
 
-            <x-input-error :messages="$errors->get('password')" class="mt-2" />
-        </div>
-
-        <!-- Confirm Password -->
-        <div class="mt-4">
-            <x-input-label for="password_confirmation" :value="__('Confirm Password')" />
-
-            <x-text-input id="password_confirmation" class="block mt-1 w-full"
-                            type="password"
-                            name="password_confirmation" required autocomplete="new-password" />
-
-            <x-input-error :messages="$errors->get('password_confirmation')" class="mt-2" />
-        </div>
-
-        <div class="flex items-center justify-end mt-4">
-            <a class="underline text-sm text-muted hover:text-ink rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500" href="{{ route('login') }}">
-                {{ __('Already registered?') }}
-            </a>
-
-            <x-primary-button class="ms-4">
-                {{ __('Register') }}
-            </x-primary-button>
-        </div>
+        <button type="submit" class="btn btn-primary btn-block btn-lg">Create account</button>
     </form>
+
+    <x-slot:footer>
+        Already have an account?
+        <a href="{{ route('login') }}" class="font-medium text-accent hover:underline">Sign in</a>
+    </x-slot:footer>
 </x-guest-layout>

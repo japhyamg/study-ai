@@ -1,10 +1,9 @@
-<button type="button" id="theme-toggle" class="btn btn-ghost btn-sm" aria-label="Toggle dark mode" onclick="
-  (function() {
-    var d = document.documentElement;
-    var isDark = d.classList.contains('dark');
-    if (isDark) { d.classList.remove('dark'); localStorage.setItem('theme','light'); }
-    else { d.classList.add('dark'); localStorage.setItem('theme','dark'); }
-  })();
-">
-  <span class="dark:hidden">🌙</span><span class="hidden dark:inline">☀️</span>
+{{-- Theme switching lives in the topbar of the app shell; this shim keeps
+     older views that still reference <x-ui.theme-toggle /> rendering. --}}
+<button type="button"
+        {{ $attributes->merge(['class' => 'btn btn-ghost btn-icon']) }}
+        aria-label="Toggle theme"
+        onclick="(function(){var d=document.documentElement,n=!d.classList.contains('dark');d.classList.toggle('dark',n);try{localStorage.setItem('theme',n?'dark':'light')}catch(e){}})()">
+    <x-icon name="sun" class="hidden dark:block" />
+    <x-icon name="moon" class="dark:hidden" />
 </button>

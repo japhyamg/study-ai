@@ -16,7 +16,7 @@
             <div class="font-semibold text-ink mb-3">Pending Materials</div>
             <ul class="divide-y text-sm">
                 @forelse($pendingMaterials as $m)
-                    <li class="py-2">{{ $m->title }} <span class="text-xs text-faint">· {{ $m->classRoom?->name ?? '—' }}</span></li>
+                    <li class="py-2">{{ $m->title }} <span class="text-xs text-faint">· {{ $m->classArm?->fullName() ?? '—' }}</span></li>
                 @empty
                     <li class="py-2 text-faint">Nothing to review.</li>
                 @endforelse

@@ -1,40 +1,121 @@
-<x-layouts.studyai title="Exams">
-    <div class="surface">
-        <div class="px-5 py-3 border-b flex items-center justify-between">
-            <span class="font-semibold text-ink">Exams</span>
-            <a href="{{ route('teacher.exams.create') }}" class="px-3 py-1 btn btn-primary text-sm">New Exam</a>
+@php
+    $toneFor = fn (string $s) => match ($s) {
+        'published' => 'success',
+        'archived' => '',
+        default => 'warn',
+    };
+@endphp
+
+<x-layouts.studyai title="Exams"
+                   subtitle="Set a paper, draw questions from the subject bank, then publish it.">
+    <x-slot:actions>
+        <x-ui.button :href="route('teacher.exams.create')" icon="plus">New exam</x-ui.button>
+    </x-slot:actions>
+
+    @if (session('status'))
+        <div class="alert-info mb-4">{{ session('status') }}</div>
+    @endif
+
+    @if ($errors->any())
+        <div class="alert-danger mb-4">
+            <ul class="list-disc ps-4">
+                @foreach ($errors->all() as $error)<li>{{ $error }}</li>@endforeach
+            </ul>
         </div>
-        <form method="GET" class="px-5 py-3 border-b flex gap-2">
-            <select name="status" class="border rounded px-2 py-1 text-sm">
-                <option value="">All</option>
-                <option value="draft" {{ $status==='draft'?'selected':'' }}>Draft</option>
-                <option value="published" {{ $status==='published'?'selected':'' }}>Published</option>
-                <option value="archived" {{ $status==='archived'?'selected':'' }}>Archived</option>
-            </select>
-            <button class="px-3 py-1 bg-paper-sunk rounded text-sm">Filter</button>
-        </form>
-        <table class="w-full text-sm">
-            <thead class="text-left text-muted border-b">
-                <tr><th class="px-5 py-2">Title</th><th class="px-5 py-2">Class</th><th class="px-5 py-2">Questions</th><th class="px-5 py-2">Status</th><th class="px-5 py-2"></th></tr>
-            </thead>
-            <tbody>
-                @forelse($exams as $e)
-                    <tr class="border-b">
-                        <td class="px-5 py-2">{{ $e->title }}</td>
-                        <td class="px-5 py-2 text-muted">{{ $e->classRoom?->name ?? '—' }}</td>
-                        <td class="px-5 py-2">{{ $e->questions_count }}</td>
-                        <td class="px-5 py-2">
-                            <span class="px-2 py-0.5 rounded text-xs {{ $e->status==='published' ? 'bg-green-100 text-ok' : 'bg-paper-sunk text-muted' }}">{{ $e->status }}</span>
-                        </td>
-                        <td class="px-5 py-2 text-right">
-                            <a href="{{ route('teacher.exams.show', $e) }}" class="text-xs text-accent">Open</a>
-                        </td>
-                    </tr>
-                @empty
-                    <tr><td colspan="5" class="px-5 py-4 text-faint">No exams.</td></tr>
-                @endforelse
-            </tbody>
-        </table>
-        <div class="px-5 py-3 border-t">{{ $exams->links() }}</div>
+    @endif
+
+    {{-- Status filter. Counts sit on the tabs so the numbers are visible
+         without clicking through each one. --}}
+    <div class="mb-5 flex flex-wrap gap-1 border-b border-line">
+        @foreach ($tabs as $key => $tab)
+            <a href="{{ route('teacher.exams.index', $key ? ['status' => $key] : []) }}"
+               class="tab-btn {{ (string) $status === (string) $key ? 'active' : '' }}">
+                {{ $tab['label'] }}
+                <span class="tnum ms-1 text-xs text-faint">({{ $tab['count'] }})</span>
+            </a>
+        @endforeach
     </div>
+
+    @if ($exams->isEmpty())
+        <x-ui.empty icon="clipboard"
+                    title="{{ $status ? 'Nothing here' : 'No exams yet' }}"
+                    message="{{ $status
+                        ? 'No exams with this status. Try another tab.'
+                        : 'Create an exam, then fill it from the subject question bank or write questions yourself.' }}" />
+    @else
+        <div class="surface overflow-hidden">
+            <table class="w-full text-sm">
+                <thead class="bg-surface-sunk text-left text-xs text-muted">
+                    <tr>
+                        <th class="px-4 py-2.5 font-medium">Exam</th>
+                        <th class="px-4 py-2.5 font-medium">Class</th>
+                        <th class="px-4 py-2.5 font-medium">Setup</th>
+                        <th class="px-4 py-2.5 font-medium">Sat</th>
+                        <th class="px-4 py-2.5 font-medium">Status</th>
+                        <th class="px-4 py-2.5"></th>
+                    </tr>
+                </thead>
+
+                <tbody class="divide-y divide-line">
+                    @foreach ($exams as $e)
+                        @php
+                            $ready = $e->questions_count > 0;
+                        @endphp
+
+                        <tr class="transition-colors hover:bg-surface-sunk/50">
+                            <td class="px-4 py-3">
+                                <a href="{{ route('teacher.exams.show', $e) }}"
+                                   class="font-medium text-ink hover:text-accent">{{ $e->title }}</a>
+
+                                @if ($e->subject)
+                                    <span class="mt-0.5 block text-xs text-faint">{{ $e->subject->name }}</span>
+                                @endif
+                            </td>
+
+                            <td class="px-4 py-3 text-muted">{{ $e->classArm?->fullName() ?: 'All classes' }}</td>
+
+                            <td class="px-4 py-3 text-xs text-muted">
+                                <span class="{{ $ready ? '' : 'text-warning' }}">
+                                    <span class="tnum">{{ $e->questions_count }}</span>
+                                    {{ Str::plural('question', $e->questions_count) }}
+                                </span>
+                                <span class="mt-0.5 block text-faint">
+                                    {{ $e->duration ? $e->duration.' min' : 'Untimed' }}
+                                    · pass <span class="tnum">{{ (int) $e->pass_mark }}</span>%
+                                </span>
+                            </td>
+
+                            <td class="px-4 py-3">
+                                @if ($e->attempts_count)
+                                    <a href="{{ route('teacher.exams.analytics', $e) }}"
+                                       class="text-xs text-accent">
+                                        <span class="tnum">{{ $e->attempts_count }}</span>
+                                        {{ Str::plural('student', $e->attempts_count) }}
+                                    </a>
+                                @else
+                                    <span class="text-xs text-faint">—</span>
+                                @endif
+                            </td>
+
+                            <td class="px-4 py-3">
+                                <x-ui.badge :tone="$toneFor($e->status)">{{ ucfirst($e->status) }}</x-ui.badge>
+
+                                @if (! $ready && $e->status === 'draft')
+                                    <span class="mt-0.5 block text-xs text-faint">Needs questions</span>
+                                @endif
+                            </td>
+
+                            <td class="px-4 py-3 text-right">
+                                <a href="{{ route('teacher.exams.show', $e) }}" class="text-xs text-accent">Open</a>
+                            </td>
+                        </tr>
+                    @endforeach
+                </tbody>
+            </table>
+        </div>
+
+        @if ($exams->hasPages())
+            <div class="mt-4">{{ $exams->links() }}</div>
+        @endif
+    @endif
 </x-layouts.studyai>

@@ -178,9 +178,12 @@ class SuperAdminController extends Controller
         $search = trim((string) $request->get('search', ''));
         $query = School::withCount('members');
         if ($search) {
-            $query->where(function ($q) use ($search) {
-                $q->where('name', 'ilike', "%{$search}%")
-                  ->orWhere('slug', 'ilike', "%{$search}%");
+            // ilike is Postgres-only and throws on MySQL; lower both sides.
+            $term = '%'.mb_strtolower($search).'%';
+
+            $query->where(function ($q) use ($term) {
+                $q->whereRaw('LOWER(name) LIKE ?', [$term])
+                  ->orWhereRaw('LOWER(slug) LIKE ?', [$term]);
             });
         }
         $schools = $query->orderBy('created_at', 'desc')->paginate(20)->withQueryString();
@@ -212,6 +215,25 @@ class SuperAdminController extends Controller
         $school->update($data);
 
         return redirect()->route('super-admin.schools')->with('status', 'School updated.');
+    }
+
+    /**
+     * Suspend or reinstate a tenant.
+     *
+     * Separate from updateSchool so the status can be flipped without
+     * resubmitting the whole record.
+     */
+    public function updateSchoolStatus(Request $request, School $school): RedirectResponse
+    {
+        $data = $request->validate([
+            'status' => ['required', Rule::in([
+                School::STATUS_ACTIVE, School::STATUS_SUSPENDED, School::STATUS_PENDING,
+            ])],
+        ]);
+
+        $school->update(['status' => $data['status']]);
+
+        return back()->with('status', 'School status updated.');
     }
 
     public function destroySchool(School $school): RedirectResponse
@@ -296,8 +318,28 @@ class SuperAdminController extends Controller
 
     public function destroyAiProvider(AiProvider $provider): RedirectResponse
     {
+        $wasActive = (bool) $provider->is_active;
+
         $provider->delete();
-        return redirect()->route('super-admin.ai-providers')->with('status', 'Provider deleted.');
+
+        // Deleting the active provider would otherwise leave none active, and
+        // AiService resolves the provider with where('is_active', true) — so
+        // every generation would fail with no obvious cause. Promote the next
+        // one rather than leaving the platform silently broken.
+        $promoted = null;
+
+        if ($wasActive) {
+            $promoted = AiProvider::orderBy('created_at')->first();
+            $promoted?->update(['is_active' => true]);
+        }
+
+        $message = match (true) {
+            $wasActive && $promoted !== null => 'Provider deleted. "'.$promoted->name.'" is now active.',
+            $wasActive => 'Provider deleted. No provider is active, so generation is disabled until you add one.',
+            default => 'Provider deleted.',
+        };
+
+        return redirect()->route('super-admin.ai-providers')->with('status', $message);
     }
 
     // ── Token limits (teachers) ──

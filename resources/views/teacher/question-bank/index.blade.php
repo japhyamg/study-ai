@@ -1,67 +1,49 @@
-<x-layouts.studyai title="Question Bank">
-    <div class="flex items-center justify-between mb-4">
-        <span class="font-semibold text-ink">Question Bank</span>
-        <span class="text-xs text-faint">{{ $questions->total() }} questions</span>
-    </div>
+@php
+    /**
+     * Question bank — subject picker.
+     *
+     * A bank is a subject's accumulated work, so the landing page is the list
+     * of subjects rather than every question at once. Several hundred
+     * questions across four subjects is not a list anyone reads; the counts
+     * make the shape visible before you commit to opening one.
+     */
+@endphp
 
-    @if(session('status'))<div class="text-ok text-sm mb-3">{{ session('status') }}</div>@endif
+<x-layouts.studyai title="Question bank">
 
-    <form method="POST" action="{{ route('teacher.question-bank.store') }}" class="surface p-5 space-y-3 mb-4">
-        @csrf
-        <div class="grid grid-cols-2 gap-3">
-            <div>
-                <label class="text-sm font-medium">Subject</label>
-                <select name="subject_id" class="w-full border rounded px-2 py-1 text-sm">
-                    <option value="">None</option>
-                    @foreach($subjects as $s)<option value="{{ $s->id }}">{{ $s->name }}</option>@endforeach
-                </select>
-            </div>
-            <div>
-                <label class="text-sm font-medium">Type</label>
-                <select name="type" class="w-full border rounded px-2 py-1 text-sm">
-                    <option value="mcq">Multiple Choice</option>
-                    <option value="true_false">True / False</option>
-                    <option value="fill_blank">Fill in the Blank</option>
-                    <option value="short_answer">Short Answer</option>
-                    <option value="essay">Essay</option>
-                </select>
-            </div>
-        </div>
-        <div>
-            <label class="text-sm font-medium">Question</label>
-            <input name="question" required class="w-full border rounded px-2 py-1 text-sm">
-        </div>
-        <div class="grid grid-cols-2 gap-3">
-            <div>
-                <label class="text-sm font-medium">Answer</label>
-                <input name="answer" required class="w-full border rounded px-2 py-1 text-sm">
-            </div>
-            <div>
-                <label class="text-sm font-medium">Difficulty (1-5)</label>
-                <input name="difficulty" type="number" min="1" max="5" value="1" class="w-full border rounded px-2 py-1 text-sm">
-            </div>
-        </div>
-        <div>
-            <label class="text-sm font-medium">Explanation (optional)</label>
-            <input name="explanation" class="w-full border rounded px-2 py-1 text-sm">
-        </div>
-        <button class="btn btn-primary">Add Question</button>
-    </form>
+    @if ($subjects->isEmpty())
+        <x-ui.empty icon="database" title="No subjects assigned"
+                    message="You are not assigned to a subject yet, so there is no bank to show. An administrator assigns subjects under Academics." />
+    @else
+        <p class="mb-4 text-xs text-faint">
+            {{ number_format($total) }} {{ Str::plural('question', $total) }} across
+            {{ $subjects->count() }} {{ Str::plural('subject', $subjects->count()) }}.
+            Questions join a bank when an admin approves the study guide they came from.
+        </p>
 
-    <div class="surface">
-        <ul class="divide-y text-sm">
-            @forelse($questions as $q)
-                <li class="px-5 py-3 flex items-start justify-between gap-3">
-                    <div>
-                        <div class="font-medium">{{ $q->question }}</div>
-                        <div class="text-xs text-faint">Answer: {{ $q->answer }} · {{ ucfirst(str_replace('_',' ',$q->type)) }} @if($q->subject)· {{ $q->subject->name }} @endif</div>
+        <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            @foreach ($subjects as $subject)
+                @php $count = (int) ($counts[$subject->id] ?? 0); @endphp
+
+                <a href="{{ route('teacher.question-bank.show', $subject) }}"
+                   class="surface flex items-center justify-between gap-3 p-4 transition-colors hover:border-accent/40">
+                    <div class="min-w-0">
+                        <p class="truncate font-medium text-ink">{{ $subject->name }}</p>
+                        <p class="mt-0.5 text-xs text-faint">
+                            @if ($count === 0)
+                                Nothing banked yet
+                            @else
+                                <span class="tnum">{{ number_format($count) }}</span>
+                                {{ Str::plural('question', $count) }}
+                            @endif
+                        </p>
                     </div>
-                    <form method="POST" action="{{ route('teacher.question-bank.destroy', $q) }}">@csrf @method('DELETE')<button class="text-danger text-xs">Delete</button></form>
-                </li>
-            @empty
-                <li class="px-5 py-4 text-faint">No questions yet.</li>
-            @endforelse
-        </ul>
-    </div>
-    {{ $questions->links() }}
+
+                    <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-surface-sunk text-muted">
+                        <x-icon name="chevron-right" />
+                    </span>
+                </a>
+            @endforeach
+        </div>
+    @endif
 </x-layouts.studyai>

@@ -2,18 +2,27 @@
 
 namespace Database\Seeders;
 
+use App\Models\AdminProfile;
+use App\Models\AssessmentType;
+use App\Models\ClassArm;
 use App\Models\ClassEnrollment;
-use App\Models\ClassModel;
+use App\Models\ClassLevel;
+use App\Models\ClassSubjectAssignment;
 use App\Models\Exam;
+use App\Models\ExamAttempt;
 use App\Models\ExamQuestion;
 use App\Models\Flashcard;
 use App\Models\Material;
 use App\Models\QuestionBank;
 use App\Models\School;
 use App\Models\SchoolMember;
+use App\Models\StudentProfile;
 use App\Models\Subject;
+use App\Models\SuperAdmin;
+use App\Models\TeacherProfile;
 use App\Models\Term;
 use App\Models\User;
+use App\Services\Academic\SchoolBootstrapper;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
@@ -24,110 +33,322 @@ class DatabaseSeeder extends Seeder
 
     public function run(): void
     {
-        // Super admin user
-        $super = User::firstOrCreate(
-            ['email' => 'super@example.com'],
+        // ── Platform staff (separate guard, central domain) ──
+        SuperAdmin::firstOrCreate(
+            ['email' => 'super@studyai.test'],
             [
-                'name' => 'Super Admin',
+                'name' => 'Ada Okafor',
                 'password' => Hash::make('password'),
+                'is_active' => true,
+                'email_verified_at' => now(),
             ]
         );
 
-        // A demo school
-        $school = School::firstOrCreate(
-            ['slug' => 'demo-school'],
-            ['name' => 'Demo School', 'logo' => null]
-        );
+        // ── Two tenants, to prove isolation ──
+        $lincoln = $this->school('Lincoln High School', 'lincoln');
+        $riverside = $this->school('Riverside Academy', 'riverside');
 
-        SchoolMember::firstOrCreate(
-            ['user_id' => $super->id, 'school_id' => $school->id],
-            ['role' => SchoolMember::ROLE_SUPER_ADMIN]
-        );
+        $this->seedSchool($lincoln, [
+            'admin' => ['Grace Adeyemi', 'admin@lincoln.test'],
+            'teachers' => [
+                ['Daniel Eze', 'daniel@lincoln.test', 'Mathematics'],
+                ['Fatima Bello', 'fatima@lincoln.test', 'Sciences'],
+            ],
+            'students' => [
+                ['Chidi Nwosu', 'chidi@lincoln.test'],
+                ['Amara Obi', 'amara@lincoln.test'],
+                ['Tunde Balogun', 'tunde@lincoln.test'],
+                ['Zainab Yusuf', 'zainab@lincoln.test'],
+            ],
+            'arms' => [
+                ['level' => 'jss1', 'name' => 'A'],
+                ['level' => 'jss2', 'name' => 'A'],
+            ],
+        ]);
 
-        // Admin user
-        $admin = User::firstOrCreate(
-            ['email' => 'admin@example.com'],
-            ['name' => 'School Admin', 'password' => Hash::make('password')]
+        // The same person can hold an account at a second school.
+        $this->seedSchool($riverside, [
+            'admin' => ['Peter Mensah', 'admin@riverside.test'],
+            'teachers' => [
+                ['Ngozi Kalu', 'ngozi@riverside.test', 'Humanities'],
+            ],
+            'students' => [
+                ['Chidi Nwosu', 'chidi@riverside.test'],
+                ['Ibrahim Sani', 'ibrahim@riverside.test'],
+            ],
+            'arms' => [
+                ['level' => 'ss1', 'name' => 'Blue', 'stream' => 'Science'],
+            ],
+        ]);
+    }
+
+    private function school(string $name, string $subdomain): School
+    {
+        return School::firstOrCreate(
+            ['subdomain' => $subdomain],
+            [
+                'name' => $name,
+                'slug' => $subdomain,
+                'status' => School::STATUS_ACTIVE,
+                'contact_email' => 'office@'.$subdomain.'.test',
+                'timezone' => 'Africa/Lagos',
+            ]
         );
-        SchoolMember::firstOrCreate(
+    }
+
+    private function seedSchool(School $school, array $spec): void
+    {
+        // Sessions, terms, class levels, subjects and assessment components
+        // all come from the configured preset (Nigerian by default).
+        app(SchoolBootstrapper::class)->bootstrap($school);
+        $school->refresh();
+
+        $term = $school->currentTerm;
+        $session = $school->currentSession;
+
+        // ── Administrator ──
+        [$adminName, $adminEmail] = $spec['admin'];
+        $admin = $this->user($school, $adminName, $adminEmail);
+        $this->member($admin, $school, SchoolMember::ROLE_ADMIN);
+        AdminProfile::firstOrCreate(
             ['user_id' => $admin->id, 'school_id' => $school->id],
-            ['role' => SchoolMember::ROLE_ADMIN]
+            ['job_title' => 'Head of School', 'is_primary' => true, 'staff_number' => 'ADM-001']
         );
 
-        // Teacher user
-        $teacher = User::firstOrCreate(
-            ['email' => 'teacher@example.com'],
-            ['name' => 'Demo Teacher', 'password' => Hash::make('password')]
-        );
-        SchoolMember::firstOrCreate(
-            ['user_id' => $teacher->id, 'school_id' => $school->id],
-            ['role' => SchoolMember::ROLE_TEACHER]
-        );
-
-        // Student user
-        $student = User::firstOrCreate(
-            ['email' => 'student@example.com'],
-            ['name' => 'Demo Student', 'password' => Hash::make('password')]
-        );
-        SchoolMember::firstOrCreate(
-            ['user_id' => $student->id, 'school_id' => $school->id],
-            ['role' => SchoolMember::ROLE_STUDENT]
-        );
-
-        // Demo class (teacher-owned) for student enrollment + published exam/flashcard
-        $class = ClassModel::firstOrCreate(
-            ['name' => 'Demo Class', 'school_id' => $school->id],
-            ['teacher_id' => $teacher->id, 'invite_code' => 'DEMO123']
-        );
-
-        ClassEnrollment::firstOrCreate(
-            ['class_id' => $class->id, 'user_id' => $student->id],
-            ['role' => 'student']
-        );
-
-        // Subjects & Terms (academic structure)
-        $subject = Subject::firstOrCreate(
-            ['name' => 'Mathematics', 'school_id' => $school->id],
-            ['code' => 'MATH']
-        );
-        Term::firstOrCreate(
-            ['name' => 'Fall Term', 'school_id' => $school->id],
-            ['active' => true, 'start_date' => now()->startOfMonth(), 'end_date' => now()->addMonths(3)]
-        );
-
-        // A question-bank entry
-        QuestionBank::firstOrCreate(
-            ['question' => 'What is the derivative of x^2?', 'school_id' => $school->id],
-            ['subject_id' => $subject->id, 'type' => 'short_answer', 'answer' => '2x', 'explanation' => 'Power rule: d/dx(x^n) = n·x^(n-1).', 'difficulty' => 2, 'created_by' => $teacher->id]
-        );
-
-        // A published exam with one question (so the student can take it)
-        $exam = Exam::firstOrCreate(
-            ['title' => 'Demo Exam', 'school_id' => $school->id],
-            ['class_id' => $class->id, 'status' => Exam::STATUS_PUBLISHED, 'duration' => 10, 'pass_mark' => 50, 'created_by' => $teacher->id]
-        );
-        if ($exam->questions()->count() === 0) {
-            ExamQuestion::create([
-                'exam_id' => $exam->id,
-                'question' => 'What is 2 + 2?',
-                'type' => 'mcq',
-                'options' => ['3', '4', '5'],
-                'answer' => '1',
-                'points' => 1,
-                'order' => 1,
-            ]);
+        // ── Teachers ──
+        $teachers = [];
+        foreach ($spec['teachers'] as $i => [$name, $email, $dept]) {
+            $teacher = $this->user($school, $name, $email);
+            $this->member($teacher, $school, SchoolMember::ROLE_TEACHER);
+            TeacherProfile::firstOrCreate(
+                ['user_id' => $teacher->id, 'school_id' => $school->id],
+                [
+                    'staff_number' => sprintf('TCH-%03d', $i + 1),
+                    'title' => $i % 2 === 0 ? 'Mr' : 'Mrs',
+                    'department' => $dept,
+                    'qualification' => 'B.Ed, M.Sc',
+                    'hired_on' => now()->subYears(random_int(1, 8)),
+                    'employment_type' => 'full_time',
+                ]
+            );
+            $teachers[] = $teacher;
         }
 
-        // A flashcard for the student
-        Flashcard::firstOrCreate(
-            ['user_id' => $student->id, 'front' => 'Capital of France?'],
-            ['back' => 'Paris', 'review_status' => 'pending', 'ease_factor' => 2.5, 'interval' => 0, 'repetitions' => 0, 'due_date' => now()]
+        // ── Class arms ──
+        $arms = [];
+        foreach ($spec['arms'] as $i => $armSpec) {
+            $level = ClassLevel::where('school_id', $school->id)
+                ->where('code', $armSpec['level'])
+                ->first();
+
+            if (! $level) {
+                continue;
+            }
+
+            $arms[] = ClassArm::firstOrCreate(
+                ['class_level_id' => $level->id, 'name' => $armSpec['name']],
+                [
+                    'school_id' => $school->id,
+                    'academic_session_id' => $session?->id,
+                    'form_teacher_id' => $teachers[$i % max(1, count($teachers))]->id ?? null,
+                    'stream' => $armSpec['stream'] ?? null,
+                    'capacity' => 40,
+                ]
+            );
+        }
+
+        if (empty($arms)) {
+            return;
+        }
+
+        $primaryArm = $arms[0];
+
+        // ── Students ──
+        $students = [];
+        foreach ($spec['students'] as $i => [$name, $email]) {
+            $student = $this->user($school, $name, $email);
+            $this->member($student, $school, SchoolMember::ROLE_STUDENT);
+
+            StudentProfile::firstOrCreate(
+                ['user_id' => $student->id, 'school_id' => $school->id],
+                [
+                    'admission_number' => sprintf('%s/%03d', strtoupper(substr($school->subdomain, 0, 3)), $i + 1),
+                    'grade_level' => $primaryArm->classLevel?->name,
+                    'section' => $primaryArm->name,
+                    'date_of_birth' => now()->subYears(random_int(12, 17))->subDays(random_int(0, 300)),
+                    'gender' => $i % 2 === 0 ? 'male' : 'female',
+                    'guardian_name' => 'Guardian of '.explode(' ', $name)[0],
+                    'guardian_phone' => '+23480'.random_int(10000000, 99999999),
+                    'enrolled_on' => now()->subMonths(random_int(2, 20)),
+                    'status' => StudentProfile::STATUS_ACTIVE,
+                ]
+            );
+
+            ClassEnrollment::firstOrCreate(
+                ['class_arm_id' => $primaryArm->id, 'user_id' => $student->id],
+                ['role' => 'student', 'enrolled_at' => now()->subWeeks(random_int(1, 10))]
+            );
+
+            $students[] = $student;
+        }
+
+        // ── Subject → teacher assignments for the primary arm ──
+        $levelCode = $primaryArm->classLevel?->code ?? '';
+        $subjects = Subject::where('school_id', $school->id)
+            ->active()
+            ->get()
+            ->filter(fn (Subject $s) => $s->appliesToLevel($levelCode))
+            ->take(6)
+            ->values();
+
+        foreach ($subjects as $i => $subject) {
+            if (empty($teachers)) {
+                break;
+            }
+
+            ClassSubjectAssignment::firstOrCreate(
+                ['class_arm_id' => $primaryArm->id, 'subject_id' => $subject->id],
+                [
+                    'school_id' => $school->id,
+                    'teacher_id' => $teachers[$i % count($teachers)]->id,
+                ]
+            );
+        }
+
+        $firstSubject = $subjects->first();
+
+        if (! $firstSubject || empty($teachers)) {
+            return;
+        }
+
+        // ── Sample content so dashboards are not empty ──
+        // One published material plus one waiting on review, so the review
+        // queue has something in it on a fresh install.
+        Material::firstOrCreate(
+            ['school_id' => $school->id, 'title' => 'Introduction to '.$firstSubject->name],
+            [
+                'class_arm_id' => $primaryArm->id,
+                'subject_id' => $firstSubject->id,
+                'type' => 'note',
+                'content' => 'Foundational concepts, worked examples and practice questions.',
+                'status' => Material::STATUS_READY,
+                'workflow_state' => Material::STATE_PUBLISHED,
+                'review_status' => Material::REVIEW_APPROVED,
+                'published' => true,
+                'published_at' => now()->subDays(3),
+                'ai_processed_at' => now()->subDays(3),
+                'created_by' => $teachers[0]->id,
+            ]
         );
 
-        // A material (for AI generation + study views)
-        $material = \App\Models\Material::firstOrCreate(
-            ['title' => 'Demo Material', 'school_id' => $school->id],
-            ['class_id' => $class->id, 'type' => 'note', 'content' => 'The quadratic formula solves ax^2+bx+c=0: x = (-b ± √(b²-4ac))/2a. A derivative measures instantaneous rate of change.', 'status' => \App\Models\Material::STATUS_DRAFT, 'review_status' => \App\Models\Material::REVIEW_PENDING, 'published' => false, 'created_by' => $teacher->id]
+        Material::firstOrCreate(
+            ['school_id' => $school->id, 'title' => $firstSubject->name.' — Revision Notes'],
+            [
+                'class_arm_id' => $primaryArm->id,
+                'subject_id' => $firstSubject->id,
+                'type' => 'note',
+                'content' => 'Summary notes covering the term, ready for end-of-term revision.',
+                'status' => Material::STATUS_READY,
+                'workflow_state' => Material::STATE_SUBMITTED,
+                'review_status' => Material::REVIEW_PENDING,
+                'published' => false,
+                'submitted_at' => now()->subHours(6),
+                'ai_processed_at' => now()->subHours(7),
+                'created_by' => $teachers[0]->id,
+            ]
+        );
+
+        $exam = Exam::firstOrCreate(
+            ['school_id' => $school->id, 'title' => $firstSubject->name.' — Continuous Assessment 1'],
+            [
+                'class_arm_id' => $primaryArm->id,
+                'subject_id' => $firstSubject->id,
+                'status' => Exam::STATUS_PUBLISHED,
+                'duration' => 30,
+                'pass_mark' => 50,
+                'created_by' => $teachers[0]->id,
+            ]
+        );
+
+        if ($exam->questions()->count() === 0) {
+            foreach ([
+                ['What is 7 x 8?', ['54', '56', '58', '64'], '1'],
+                ['Which of these numbers is prime?', ['9', '15', '17', '21'], '2'],
+                ['What is 15% of 200?', ['20', '25', '30', '35'], '2'],
+            ] as $order => [$question, $options, $answer]) {
+                ExamQuestion::create([
+                    'exam_id' => $exam->id,
+                    'question' => $question,
+                    'type' => 'mcq',
+                    'options' => $options,
+                    'answer' => $answer,
+                    'points' => 1,
+                    'order' => $order + 1,
+                ]);
+            }
+        }
+
+        foreach (array_slice($students, 0, 2) as $n => $student) {
+            ExamAttempt::firstOrCreate(
+                ['exam_id' => $exam->id, 'user_id' => $student->id],
+                [
+                    'score' => $n === 0 ? 3 : 2,
+                    'max_score' => 3,
+                    'percentage' => $n === 0 ? 100 : 67,
+                    'passed' => true,
+                    'submitted' => true,
+                    'start_time' => now()->subDays(2),
+                    'end_time' => now()->subDays(2)->addMinutes(18),
+                    'answers' => [],
+                ]
+            );
+        }
+
+        QuestionBank::firstOrCreate(
+            ['school_id' => $school->id, 'question' => 'Define photosynthesis.'],
+            [
+                'subject_id' => $firstSubject->id,
+                'type' => 'short_answer',
+                'answer' => 'The process by which green plants convert light energy into chemical energy.',
+                'difficulty' => 2,
+                'created_by' => $teachers[0]->id,
+            ]
+        );
+
+        foreach ($students as $student) {
+            Flashcard::firstOrCreate(
+                ['user_id' => $student->id, 'front' => 'What is the capital of Nigeria?'],
+                [
+                    'back' => 'Abuja',
+                    'review_status' => 'pending',
+                    'ease_factor' => 2.5,
+                    'interval' => 0,
+                    'repetitions' => 0,
+                    'due_date' => now(),
+                ]
+            );
+        }
+    }
+
+    private function user(School $school, string $name, string $email): User
+    {
+        return User::firstOrCreate(
+            ['school_id' => $school->id, 'email' => $email],
+            [
+                'name' => $name,
+                'password' => Hash::make('password'),
+                'is_active' => true,
+                'email_verified_at' => now(),
+                'timezone' => 'Africa/Lagos',
+            ]
+        );
+    }
+
+    private function member(User $user, School $school, string $role): void
+    {
+        SchoolMember::firstOrCreate(
+            ['user_id' => $user->id, 'school_id' => $school->id],
+            ['role' => $role]
         );
     }
 }

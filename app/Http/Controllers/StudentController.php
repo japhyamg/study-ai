@@ -3,12 +3,17 @@
 namespace App\Http\Controllers;
 
 use App\Models\ClassEnrollment;
+use App\Models\ClassSubjectAssignment;
 use App\Models\Exam;
 use App\Models\ExamAttempt;
 use App\Models\ExamQuestion;
 use App\Models\Flashcard;
 use App\Models\Material;
 use App\Models\School;
+use App\Models\Subject;
+use App\Models\User;
+use App\Services\Learning\ExamPaperService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -31,19 +36,21 @@ class StudentController extends Controller
         $user = auth()->user();
         $school = $this->school();
 
-        $enrollments = ClassEnrollment::with('class.subject')
+        $enrollments = ClassEnrollment::with('classArm.classLevel')
             ->where('user_id', $user->id)
             ->get();
-        $classIds = $enrollments->pluck('class_id')->filter();
+        $classIds = $enrollments->pluck('class_arm_id')->filter();
 
-        $availableExams = Exam::where('school_id', $school?->id)
+        // The class filter is grouped: left ungrouped, the OR escapes the school
+        // and status conditions and starts matching other tenants' exams.
+        $availableExams = Exam::with('subject')
+            ->where('school_id', $school?->id)
             ->where('status', Exam::STATUS_PUBLISHED)
-            ->whereIn('class_id', $classIds->isEmpty() ? [null] : $classIds)
-            ->orWhere(function ($q) use ($school) {
-                $q->where('school_id', $school?->id)->where('status', Exam::STATUS_PUBLISHED)->whereNull('class_id');
+            ->where(function ($q) use ($classIds) {
+                $q->whereIn('class_arm_id', $classIds)->orWhereNull('class_arm_id');
             })
             ->withCount('questions')
-            ->orderBy('created_at', 'desc')
+            ->orderByDesc('created_at')
             ->get();
 
         // Upcoming exams (next 3 with a future/present start time, else latest published)
@@ -53,32 +60,24 @@ class StudentController extends Controller
             ->take(3)
             ->values();
 
-        // Published teacher materials visible to this student (recent first)
-        $publishedMaterials = Material::with(['subject'])
-            ->where('school_id', $school?->id)
-            ->where('published', true)
-            ->whereIn('class_id', $classIds->isEmpty() ? [null] : $classIds)
-            ->orWhere(function ($q) use ($school) {
-                $q->where('school_id', $school?->id)->where('published', true)->whereNull('class_id');
-            })
-            ->withCount(['flashcards', 'questions'])
-            ->orderBy('published_at', 'desc')
-            ->orderBy('created_at', 'desc')
-            ->limit(6)
-            ->get();
+        // The subjects this student is taught, which is how they navigate now.
+        $subjects = ClassSubjectAssignment::with(['subject', 'teacher'])
+            ->whereIn('class_arm_id', $classIds)
+            ->get()
+            ->filter(fn ($a) => $a->subject !== null)
+            ->unique('subject_id')
+            ->sortBy(fn ($a) => $a->subject->name)
+            ->values();
 
         $visibleFlashcards = $this->visibleFlashcardsQuery($user);
 
         $stats = [
-            'classes' => $enrollments->count(),
+            'subjects' => $subjects->count(),
             'dueFlashcards' => (clone $visibleFlashcards)
                 ->where(fn ($q) => $q->whereNull('due_date')->orWhere('due_date', '<=', now()))
                 ->count(),
             'upcomingExams' => $upcomingExams->count(),
-            'materials' => $publishedMaterials->count(),
         ];
-
-        $dueFlashcards = $stats['dueFlashcards'];
 
         $recentAttempts = ExamAttempt::with('exam')
             ->where('user_id', $user->id)
@@ -88,8 +87,7 @@ class StudentController extends Controller
             ->get();
 
         return view('student.dashboard', compact(
-            'enrollments', 'availableExams', 'upcomingExams', 'publishedMaterials',
-            'stats', 'dueFlashcards', 'recentAttempts'
+            'subjects', 'availableExams', 'upcomingExams', 'stats', 'recentAttempts'
         ));
     }
 
@@ -103,43 +101,84 @@ class StudentController extends Controller
         return Flashcard::query()
             ->where(function ($q) use ($user, $sid) {
                 $q->where('user_id', $user->id)
-                  ->orWhereHas('material', fn ($m) => $m->where('published', true)->where('school_id', $sid));
+                  ->orWhereHas('material', fn ($m) => $m->published()->where('school_id', $sid));
             })
             // hide template cards the student already has a personal copy of
             ->whereRaw('not exists (select 1 from flashcards mine where mine.user_id = ? and mine.material_id = flashcards.material_id and mine.front = flashcards.front)', [$user->id]);
     }
 
-    // ── Classes & Materials ──
-    public function classes(): View
+    // ── Subjects ──
+
+    /**
+     * The subjects this student is taught.
+     *
+     * A student belongs to a class arm, and each arm is assigned its subjects
+     * with a teacher against each. The arm is how the school groups them; the
+     * subject is what they actually study, so that is what the menu shows.
+     */
+    public function subjects(): View
     {
         $user = auth()->user();
-        $enrollments = ClassEnrollment::with(['class' => fn ($q) => $q->withCount('enrollments')])
-            ->where('user_id', $user->id)
-            ->get();
-        return view('student.classes', compact('enrollments'));
+
+        $armIds = ClassEnrollment::where('user_id', $user->id)
+            ->pluck('class_arm_id')
+            ->filter();
+
+        $assignments = ClassSubjectAssignment::with(['subject', 'teacher', 'classArm.classLevel'])
+            ->whereIn('class_arm_id', $armIds)
+            ->get()
+            ->filter(fn ($a) => $a->subject !== null)
+            // An arm can appear twice for one subject across a split timetable;
+            // the student only needs the subject once.
+            ->unique('subject_id')
+            ->sortBy(fn ($a) => $a->subject->name)
+            ->values();
+
+        return view('student.subjects', compact('assignments'));
     }
 
-    public function classShow(ClassEnrollment $enrollment): View
-    {
-        abort_unless($enrollment->user_id === auth()->id(), 403);
-        $enrollment->load(['class.materials' => fn ($q) => $q->where('published', true)]);
-        return view('student.class-show', compact('enrollment'));
-    }
-
-    public function materials(): View
+    public function subjectShow(Subject $subject): View
     {
         $user = auth()->user();
         $school = $this->school();
-        $classIds = ClassEnrollment::where('user_id', $user->id)->pluck('class_id')->filter();
-        $materials = Material::with('classRoom')
-            ->where('published', true)
-            ->whereIn('class_id', $classIds->isEmpty() ? [null] : $classIds)
-            ->orWhere(function ($q) use ($school) {
-                $q->where('school_id', $school?->id)->where('published', true)->whereNull('class_id');
+
+        $armIds = ClassEnrollment::where('user_id', $user->id)
+            ->pluck('class_arm_id')
+            ->filter();
+
+        // Reachable only if one of the student's own arms is taught it.
+        $assignment = ClassSubjectAssignment::with(['teacher', 'classArm.classLevel'])
+            ->where('subject_id', $subject->id)
+            ->whereIn('class_arm_id', $armIds)
+            ->first();
+
+        abort_unless($assignment !== null, 404);
+
+        $exams = Exam::where('school_id', $school?->id)
+            ->where('subject_id', $subject->id)
+            ->where('status', Exam::STATUS_PUBLISHED)
+            ->where(function ($q) use ($armIds) {
+                $q->whereIn('class_arm_id', $armIds)->orWhereNull('class_arm_id');
             })
-            ->orderBy('created_at', 'desc')
-            ->paginate(15);
-        return view('student.materials', compact('materials'));
+            ->withCount('questions')
+            ->orderByDesc('created_at')
+            ->get();
+
+        $attempts = ExamAttempt::where('user_id', $user->id)
+            ->where('submitted', true)
+            ->whereIn('exam_id', $exams->pluck('id'))
+            ->get()
+            ->keyBy('exam_id');
+
+        // Only this subject's guides. The shared query keeps the visibility
+        // rule in one place rather than restating it per screen.
+        $guides = $this->studyGuideQuery($user)
+            ->where('subject_id', $subject->id)
+            ->withCount(['flashcards', 'questions'])
+            ->orderBy('title')
+            ->get();
+
+        return view('student.subject-show', compact('subject', 'assignment', 'exams', 'attempts', 'guides'));
     }
 
     // ── Exams ──
@@ -147,13 +186,13 @@ class StudentController extends Controller
     {
         $user = auth()->user();
         $school = $this->school();
-        $classIds = ClassEnrollment::where('user_id', $user->id)->pluck('class_id')->filter();
+        $classIds = ClassEnrollment::where('user_id', $user->id)->pluck('class_arm_id')->filter();
 
         $exams = Exam::where('school_id', $school?->id)
             ->where('status', Exam::STATUS_PUBLISHED)
-            ->whereIn('class_id', $classIds->isEmpty() ? [null] : $classIds)
+            ->whereIn('class_arm_id', $classIds->isEmpty() ? [null] : $classIds)
             ->orWhere(function ($q) use ($school) {
-                $q->where('school_id', $school?->id)->where('status', Exam::STATUS_PUBLISHED)->whereNull('class_id');
+                $q->where('school_id', $school?->id)->where('status', Exam::STATUS_PUBLISHED)->whereNull('class_arm_id');
             })
             ->withCount('questions')
             ->orderBy('created_at', 'desc')
@@ -165,6 +204,17 @@ class StudentController extends Controller
     public function startExam(Exam $exam): RedirectResponse
     {
         abort_unless($exam->status === Exam::STATUS_PUBLISHED, 403);
+
+        // The scheduling window, if the teacher set one.
+        if ($exam->start_time && $exam->start_time->isFuture()) {
+            return back()->withErrors([
+                'exam' => 'This exam opens '.$exam->start_time->format('j M Y, g:ia').'.',
+            ]);
+        }
+
+        if ($exam->end_time && $exam->end_time->isPast()) {
+            return back()->withErrors(['exam' => 'This exam has closed.']);
+        }
 
         // Respect max attempts
         $attempts = ExamAttempt::where('exam_id', $exam->id)->where('user_id', auth()->id())->where('submitted', true)->count();
@@ -183,14 +233,16 @@ class StudentController extends Controller
         return redirect()->route('student.exams.take', [$exam, $attempt]);
     }
 
-    public function takeExam(Exam $exam, ExamAttempt $attempt): View
+    public function takeExam(Exam $exam, ExamAttempt $attempt, ExamPaperService $paper): View
     {
         abort_unless($attempt->user_id === auth()->id() && !$attempt->submitted, 403);
-        $questions = $exam->questions()->orderBy('order')->get();
+
+        $questions = $paper->questionsFor($exam, $attempt);
+
         return view('student.exam-take', compact('exam', 'attempt', 'questions'));
     }
 
-    public function submitExam(Request $request, Exam $exam, ExamAttempt $attempt): RedirectResponse
+    public function submitExam(Request $request, Exam $exam, ExamAttempt $attempt, ExamPaperService $paper): RedirectResponse
     {
         abort_unless($attempt->user_id === auth()->id() && !$attempt->submitted, 403);
 
@@ -201,12 +253,18 @@ class StudentController extends Controller
 
         foreach ($questions as $q) {
             $given = $request->input("q.{$q->id}");
-            $isCorrect = false;
-            if ($given !== null && (string) $given === (string) $q->answer) {
-                $isCorrect = true;
+            $given = is_string($given) ? $given : null;
+
+            $isCorrect = $paper->isCorrect($q, $given);
+
+            if ($isCorrect) {
                 $score += $q->points ?? 1;
             }
+
             $maxScore += $q->points ?? 1;
+
+            // Store the answer text, not a position: options may be shuffled
+            // per attempt, so an index would not survive review.
             $answers[] = [
                 'question_id' => $q->id,
                 'given' => $given,
@@ -230,85 +288,27 @@ class StudentController extends Controller
         return redirect()->route('student.exams.result', [$exam, $attempt]);
     }
 
-    public function examResult(Exam $exam, ExamAttempt $attempt): View
+    public function examResult(Exam $exam, ExamAttempt $attempt, ExamPaperService $paper): View
     {
         abort_unless($attempt->user_id === auth()->id(), 403);
         $questions = $exam->questions()->orderBy('order')->get();
-        return view('student.exam-result', compact('exam', 'attempt', 'questions'));
+
+        return view('student.exam-result', compact('exam', 'attempt', 'questions', 'paper'));
     }
 
-    // ── Flashcards (SRS) ──
-    public function flashcards(Request $request): View
-    {
-        $user = auth()->user();
-        $query = self::visibleFlashcardsQuery($user);
-        if ($request->get('view') === 'due') {
-            $query->where(function ($q) {
-                $q->whereNull('due_date')->orWhere('due_date', '<=', now());
-            });
-        }
-        $flashcards = $query->with('material')->orderBy('due_date')->paginate(20);
-        return view('student.flashcards', compact('flashcards'));
-    }
-
-    public function reviewFlashcard(Request $request, Flashcard $flashcard): RedirectResponse
-    {
-        abort_unless($this->canReviewFlashcard($flashcard), 403);
-        $data = $request->validate([
-            'quality' => 'required|integer|min:0|max:5',
-        ]);
-
-        // SM-2 algorithm
-        $quality = (int) $data['quality'];
-        $repetitions = $flashcard->repetitions;
-        $ease = $flashcard->ease_factor;
-        $interval = $flashcard->interval;
-
-        if ($quality < 3) {
-            $repetitions = 0;
-            $interval = 1;
-        } else {
-            $repetitions += 1;
-            if ($repetitions === 1) {
-                $interval = 1;
-            } elseif ($repetitions === 2) {
-                $interval = 6;
-            } else {
-                $interval = (int) round($interval * $ease);
-            }
-        }
-
-        $ease = $ease + (0.1 - (5 - $quality) * (0.08 + (5 - $quality) * 0.02));
-        if ($ease < 1.3) {
-            $ease = 1.3;
-        }
-
-        $flashcard->update([
-            'ease_factor' => $ease,
-            'interval' => $interval,
-            'repetitions' => $repetitions,
-            'lapses' => $quality < 3 ? $flashcard->lapses + 1 : $flashcard->lapses,
-            'due_date' => now()->addDays($interval),
-            'last_review' => now(),
-            'review_count' => $flashcard->review_count + 1,
-        ]);
-
-        return back();
-    }
-
-    /**
-     * Study mode — choose a set to review.
-     */
     public function studyIndex(): View
     {
         $user = auth()->user();
-        $materials = Material::where('school_id', $user->currentSchool()?->id)
-            ->where('published', true)
-            ->withCount(['flashcards'])
+
+        // Every published guide for the subjects this student is taught, not
+        // only the ones that happen to carry flashcards: a guide is worth
+        // reading on its own, and hiding it because nobody generated cards for
+        // it yet makes teachers' work disappear.
+        $materials = $this->studyGuideQuery($user)
+            ->withCount(['flashcards', 'questions'])
             ->orderBy('title')
             ->get()
-            ->filter(fn ($m) => $m->flashcards_count > 0)
-            ->values();
+            ->groupBy(fn ($m) => $m->subject?->name ?? 'General');
 
         $dueCount = self::visibleFlashcardsQuery($user)
             ->where(fn ($q) => $q->whereNull('due_date')->orWhere('due_date', '<=', now()))
@@ -318,15 +318,48 @@ class StudentController extends Controller
     }
 
     /**
+     * Published guides a student may open.
+     *
+     * Scoped to the subjects taught to their own class arms. A guide with no
+     * subject is school-wide and stays visible, otherwise general material
+     * would vanish from the list entirely.
+     */
+    private function studyGuideQuery(User $user)
+    {
+        $armIds = ClassEnrollment::where('user_id', $user->id)
+            ->pluck('class_arm_id')
+            ->filter();
+
+        $subjectIds = ClassSubjectAssignment::whereIn('class_arm_id', $armIds)
+            ->pluck('subject_id')
+            ->filter()
+            ->unique();
+
+        return Material::with('subject')
+            ->where('school_id', $user->currentSchool()?->id)
+            ->published()
+            ->where(function ($q) use ($subjectIds) {
+                $q->whereIn('subject_id', $subjectIds)->orWhereNull('subject_id');
+            });
+    }
+
+    /**
      * Study hub — tabbed view over a material (Flashcards / Quiz /
      * Edit-questions / Images / Study Guide). Mirrors the original
      * /study/[id] page.
      */
     public function studyHub(Material $material): View
     {
-        abort_unless($material->published, 403);
+        abort_unless($material->isPublished(), 403);
         $user = auth()->user();
         abort_unless($material->school_id === $user->currentSchool()?->id, 403);
+
+        // Same scope as the list. Being in the school is not enough: a guide
+        // for a subject this student is not taught should not open by id.
+        abort_unless(
+            $this->studyGuideQuery($user)->whereKey($material->id)->exists(),
+            404
+        );
 
         $material->load([
             'flashcards' => fn ($q) => $q->orderBy('id'),
@@ -334,6 +367,9 @@ class StudentController extends Controller
             'studyGuide',
             'images' => fn ($q) => $q->orderBy('id'),
             'subject',
+            // The topic graph powers the "what to study next" panel.
+            'topic.links.linkedTopic',
+            'topic.backlinks.topic',
         ]);
 
         return view('student.study.hub', compact('material'));
@@ -361,12 +397,21 @@ class StudentController extends Controller
     /**
      * Record an answer during a study session and advance.
      */
-    public function studyAnswer(Request $request, Flashcard $flashcard): RedirectResponse
+    public function studyAnswer(Request $request, Flashcard $flashcard): RedirectResponse|JsonResponse
     {
         abort_unless($this->canReviewFlashcard($flashcard), 403);
         $data = $request->validate(['quality' => 'required|integer|min:0|max:5']);
 
         $this->applySm2($flashcard, (int) $data['quality']);
+
+        // The deck posts ratings in the background so the reader never waits
+        // on a round trip; only the non-JS path needs a redirect.
+        if ($request->expectsJson()) {
+            return response()->json([
+                'due_date' => $flashcard->due_date?->toIso8601String(),
+                'interval' => $flashcard->interval,
+            ]);
+        }
 
         $queue = session('study_queue', []);
         $index = (int) session('study_index', 0) + 1;
@@ -375,6 +420,7 @@ class StudentController extends Controller
         if ($index >= count($queue)) {
             return redirect()->route('student.study.index')->with('status', 'Study session complete — nice work.');
         }
+
         return back();
     }
 
@@ -403,7 +449,7 @@ class StudentController extends Controller
         }
         // teacher-generated card on a published material in the student's school
         return (bool) $flashcard->material()
-            ->where('published', true)
+            ->published()
             ->where('school_id', $user->currentSchool()?->id)
             ->count();
     }

@@ -9,9 +9,9 @@
         <div class="grid grid-cols-2 gap-4">
             <div>
                 <label class="text-sm font-medium">Class</label>
-                <select name="class_id" class="w-full border rounded px-2 py-1 text-sm">
+                <select name="class_arm_id" class="w-full border rounded px-2 py-1 text-sm">
                     <option value="">No class</option>
-                    @foreach($classes as $c)<option value="{{ $c->id }}" @if($c->id===$material->class_id) selected @endif>{{ $c->name }}</option>@endforeach
+                    @foreach($classes as $c)<option value="{{ $c->id }}" @if($c->id===$material->class_arm_id) selected @endif>{{ $c->fullName() }}</option>@endforeach
                 </select>
             </div>
             <div>
@@ -31,8 +31,24 @@
             <textarea name="description" rows="2" class="w-full border rounded px-2 py-1 text-sm">{{ old('description', $material->description) }}</textarea>
         </div>
         <div>
-            <label class="text-sm font-medium">Content / Transcript</label>
-            <textarea name="content" rows="6" class="w-full border rounded px-2 py-1 text-sm font-mono">{{ old('content', $material->content) }}</textarea>
+            @if ($material->file_path)
+                {{-- The uploaded file is the source of truth; it is parsed on
+                     demand rather than copied into the database, so an edit
+                     here would have no effect. --}}
+                <label class="text-sm font-medium">Source</label>
+                <div class="rounded border border-line px-3 py-2 text-sm text-muted">
+                    {{ $material->file_name ?? 'Uploaded file' }}
+                    <span class="text-xs text-faint">
+                        · read from the file each time content is generated
+                    </span>
+                </div>
+                <p class="mt-1 text-xs text-faint">
+                    To change the content, upload it as a new study guide.
+                </p>
+            @else
+                <label class="text-sm font-medium">Content / Transcript</label>
+                <textarea name="content" rows="6" class="w-full border rounded px-2 py-1 text-sm font-mono">{{ old('content', $material->content) }}</textarea>
+            @endif
         </div>
         <div>
             <label class="text-sm font-medium">Status</label>

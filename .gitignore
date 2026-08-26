@@ -22,3 +22,6 @@
 Homestead.json
 Homestead.yaml
 Thumbs.db
+
+# Sandbox-only PHP-WASM preview harness (not part of the application)
+/devserver

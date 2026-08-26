@@ -2,58 +2,57 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\SchoolMember;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
- * Role gate — mirrors the original app's role scoping (super_admin|admin|teacher|student).
- * Usage: ->middleware('role:teacher') or ->middleware('role:admin,super_admin')
+ * Role gate, scoped to the active tenant.
+ *
+ * Usage: ->middleware('role:teacher') or ->middleware('role:admin,teacher')
+ *
+ * Super-admins live on their own guard and their own table, and are not
+ * members of any school. They satisfy only the `super_admin` role here; to act
+ * inside a school they must use the explicit impersonation flow, which issues
+ * a real `web` session as a real school user.
  */
 class EnsureRole
 {
     public function handle(Request $request, Closure $next, string ...$roles): Response
     {
-        $user = $request->user();
-        if (! $user) {
-            return redirect()->route('login');
-        }
+        // Platform staff authenticate on a different guard, so check it first
+        // — request->user() would return null for them on tenant routes and
+        // the school user on platform routes is never the right principal.
+        if ($superAdmin = $request->user('superadmin')) {
+            if (! in_array(SchoolMember::ROLE_SUPER_ADMIN, $roles, true)) {
+                abort(403, 'This area belongs to a school, not the platform.');
+            }
 
-        $highest = $this->highestRole($user);
-        if ($highest === null) {
-            abort(403, 'You are not a member of any school.');
-        }
-
-        // super_admin can do anything
-        if ($highest === \App\Models\SchoolMember::ROLE_SUPER_ADMIN) {
             return $next($request);
         }
 
-        if (! in_array($highest, $roles, true)) {
-            abort(403, 'Insufficient role privileges.');
+        $user = $request->user();
+
+        if (! $user) {
+            return redirect()->guest(route('login'));
+        }
+
+        // A school user can never satisfy the platform role.
+        if ($roles === [SchoolMember::ROLE_SUPER_ADMIN]) {
+            abort(403, 'You do not have access to this area.');
+        }
+
+        $role = $user->roleInSchool();
+
+        if ($role === null) {
+            return redirect()->route('onboarding');
+        }
+
+        if (! in_array($role, $roles, true)) {
+            abort(403, 'You do not have access to this area.');
         }
 
         return $next($request);
-    }
-
-    /**
-     * Resolve the active role for the user.
-     * Priority: super_admin > admin > teacher > student.
-     */
-    protected function highestRole(\App\Models\User $user): ?string
-    {
-        $order = [
-            \App\Models\SchoolMember::ROLE_SUPER_ADMIN,
-            \App\Models\SchoolMember::ROLE_ADMIN,
-            \App\Models\SchoolMember::ROLE_TEACHER,
-            \App\Models\SchoolMember::ROLE_STUDENT,
-        ];
-        $roles = $user->memberships()->pluck('role')->unique()->all();
-        foreach ($order as $r) {
-            if (in_array($r, $roles, true)) {
-                return $r;
-            }
-        }
-        return null;
     }
 }

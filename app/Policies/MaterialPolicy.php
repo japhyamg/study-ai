@@ -24,7 +24,8 @@ class MaterialPolicy
             return $material->created_by === $user->id
                 || $material->school_id === $user->currentSchool()?->id;
         }
-        return $material->published
+        // Students only ever see published material.
+        return $material->isPublished()
             && $material->school_id === $user->currentSchool()?->id;
     }
 
@@ -44,6 +45,12 @@ class MaterialPolicy
     public function review(User $user, Material $material): bool
     {
         return $this->isPlatformAdmin($user) && $this->inSchool($user, $material->school_id);
+    }
+
+    /** Only the owning teacher submits their own work for review. */
+    public function submit(User $user, Material $material): bool
+    {
+        return $this->update($user, $material);
     }
 
     public function delete(User $user, Material $material): bool

@@ -1,0 +1,742 @@
+@php
+    use App\Models\Material;
+
+    $user = auth()->user();
+    $canReview = $user->can('review', $material);
+    $canEdit = $user->can('update', $material);
+
+    $guide = $material->studyGuide;
+    $sections = $guide?->normalisedSections() ?? [];
+    $keyTerms = $guide?->normalisedKeyTerms() ?? [];
+    $topic = $material->topic;
+
+    $links = $topic
+        ? $topic->links->filter(fn ($link) => $link->linkedTopic)
+        : collect();
+
+    $awaitingDecision = in_array($material->workflow_state, [
+        Material::STATE_SUBMITTED,
+        Material::STATE_UNDER_REVIEW,
+    ], true);
+
+    $hasContent = $material->hasGeneratedContent();
+
+    // Parsed on demand for uploads, so read it once and reuse.
+    $sourceText = $material->sourceText();
+    $hasText = $sourceText !== '';
+    $sourceError = $hasText ? null : $material->sourceTextError();
+
+    // Generation is available whenever the material is not mid-run and has
+    // text to work from. First run and re-run are the same action.
+    $canGenerate = $canEdit && $hasText && ! $material->isProcessing();
+
+    $config = $material->generation_config ?? [];
+    $configuredTypes = $config['questionTypes'] ?? config('ai.defaults.question_types', ['multiple-choice']);
+
+    $canSubmit = $canEdit && in_array($material->workflow_state, [
+        Material::STATE_DRAFT,
+        Material::STATE_AI_COMPLETED,
+        Material::STATE_CHANGES_REQUESTED,
+    ], true);
+
+    $tabs = [
+        ['guide', 'Study Guide', 'document', count($sections)],
+        ['flashcards', 'Flashcards', 'layers', $material->flashcards->count()],
+        ['quiz', 'Quiz', 'clipboard', $material->questions->count()],
+        ['source', 'Source', 'book', 0],
+        ['notes', 'Notes', 'chat', $material->notes->count()],
+        ['links', 'Links', 'link', $links->count()],
+    ];
+
+    $tab = request()->query('tab', 'guide');
+    $backUrl = $canReview ? route('learning.review') : route('teacher.materials.index');
+@endphp
+
+<x-layouts.studyai title="Study guide" hide-head>
+
+    <div x-data="{ tab: @js($tab) }">
+
+        {{-- ── Header ── --}}
+        <a href="{{ $backUrl }}" class="text-xs text-accent">← Back to study guides queue</a>
+
+        <div class="mt-2 flex flex-wrap items-start justify-between gap-4">
+            <div class="min-w-0">
+                <h2 class="font-display text-2xl text-ink">{{ $material->title }}</h2>
+
+                <div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted">
+                    @if ($material->subject)
+                        <span>{{ $material->subject->name }}</span><span class="text-faint">·</span>
+                    @endif
+                    @if ($material->classArm)
+                        <span>{{ $material->classArm->fullName() }}</span><span class="text-faint">·</span>
+                    @endif
+                    <span>by <span class="font-medium text-ink">{{ $material->creator?->name ?? 'Unknown' }}</span></span>
+                    <x-ui.badge :tone="$material->stateTone()">{{ $material->stateLabel() }}</x-ui.badge>
+                </div>
+
+                @if ($material->submitted_at)
+                    <p class="mt-1 text-xs text-faint">Submitted {{ $material->submitted_at->diffForHumans() }}</p>
+                @endif
+            </div>
+
+            {{-- Decision actions live in the header, where the reviewer expects them --}}
+            <div class="flex items-center gap-1">
+                @if ($canReview && $awaitingDecision)
+                    <form method="POST" action="{{ route('learning.materials.approve', $material) }}">
+                        @csrf
+                        <input type="hidden" name="publish" value="1">
+                        <button type="submit" class="btn btn-primary btn-sm">
+                            <x-icon name="check" /> Approve
+                        </button>
+                    </form>
+
+                    <button type="button" class="btn btn-ghost btn-sm" @click="$dispatch('open-changes')">
+                        <x-icon name="pencil" /> Request Changes
+                    </button>
+
+                    <button type="button" class="btn btn-ghost btn-sm text-danger" @click="$dispatch('open-reject')">
+                        <x-icon name="x" /> Reject
+                    </button>
+                @endif
+
+                @if ($canReview && $material->workflow_state === Material::STATE_APPROVED)
+                    <form method="POST" action="{{ route('learning.materials.publish', $material) }}">
+                        @csrf
+                        <button type="submit" class="btn btn-primary btn-sm">Publish to students</button>
+                    </form>
+                @endif
+
+                @if ($canReview && $material->isPublished())
+                    <form method="POST" action="{{ route('learning.materials.unpublish', $material) }}">
+                        @csrf
+                        <button type="submit" class="btn btn-outline btn-sm">Unpublish</button>
+                    </form>
+                @endif
+
+                @if ($canGenerate)
+                    <button type="button"
+                            class="btn btn-sm {{ $hasContent ? 'btn-outline' : 'btn-primary' }}"
+                            @click="$dispatch('open-generate')">
+                        <x-icon name="sparkles" />
+                        {{ $hasContent ? 'Regenerate' : 'Generate content' }}
+                    </button>
+                @endif
+
+                @if ($canSubmit)
+                    <button type="button" class="btn btn-primary btn-sm" @click="$dispatch('open-submit')">
+                        Submit for review
+                    </button>
+                @endif
+
+                @can('delete', $material)
+                    <form method="POST" action="{{ route('teacher.materials.destroy', $material) }}"
+                          @submit.prevent="confirm('Delete “{{ addslashes($material->title) }}”? {{ $material->isPublished() ? 'Students will lose access to it immediately. ' : '' }}Its study guide, flashcards and questions go with it. This cannot be undone.') && $el.submit()">
+                        @csrf
+                        @method('DELETE')
+                        <button type="submit" class="btn btn-ghost btn-sm text-danger">
+                            <x-icon name="trash" /> Delete
+                        </button>
+                    </form>
+                @endcan
+            </div>
+        </div>
+
+        {{-- ── Flash / errors ── --}}
+        @if (session('status'))
+            <div class="mt-4 rounded-md border border-success/30 bg-success/5 px-4 py-2.5 text-sm text-success">
+                {{ session('status') }}
+            </div>
+        @endif
+
+        @if ($errors->any())
+            <div class="mt-4 rounded-md border border-danger/30 bg-danger/5 px-4 py-2.5 text-sm text-danger">
+                {{ $errors->first() }}
+            </div>
+        @endif
+
+        @if ($material->isProcessing())
+            <div class="mt-4 flex items-center gap-3 rounded-md border border-line bg-surface-raised px-4 py-3 text-sm"
+                 x-init="setTimeout(() => window.location.reload(), 8000)">
+                <span class="h-2 w-2 shrink-0 animate-pulse rounded-full bg-accent"></span>
+                <span class="text-muted">Generating study content. This page refreshes automatically.</span>
+            </div>
+        @elseif ($material->workflow_state === Material::STATE_AI_FAILED)
+            {{-- Persistent by design: this reports a state the material is
+                 still in, not a passing event, and the header already offers
+                 Regenerate. The stored message is user-safe: provider output
+                 is translated in AiContentService and only the reference code
+                 survives. --}}
+            <div class="mt-4 rounded-md border border-danger/30 bg-danger/5 px-4 py-3 text-sm">
+                <div class="font-medium text-danger">Generation didn't finish</div>
+                <p class="mt-1 text-muted">
+                    {{ $material->processingJobs()->latest()->first()?->error
+                        ?? 'Something went wrong while generating this content. Try again.' }}
+                </p>
+            </div>
+        @endif
+
+        @if ($material->review_notes && $canEdit && $material->workflow_state === Material::STATE_CHANGES_REQUESTED)
+            <div class="mt-4 rounded-md border border-warning/30 bg-warning/5 px-4 py-3 text-sm">
+                <div class="font-medium text-ink">Changes requested</div>
+                <p class="mt-1 text-muted">{{ $material->review_notes }}</p>
+            </div>
+        @endif
+
+        {{-- ── Tabs ── --}}
+        <div class="mt-5 flex flex-wrap gap-1 border-b border-line">
+            @foreach ($tabs as [$key, $label, $icon, $count])
+                <button type="button" class="tab-btn flex items-center gap-1.5"
+                        :class="tab === '{{ $key }}' ? 'active' : ''"
+                        @click="tab = '{{ $key }}'; history.replaceState(null, '', '?tab={{ $key }}')">
+                    <x-icon :name="$icon" />
+                    {{ $label }}
+                    @if ($count > 0)<span class="tnum text-xs text-faint">{{ $count }}</span>@endif
+                </button>
+            @endforeach
+        </div>
+
+        <div class="mt-5">
+
+            {{-- ─────────── Study guide ─────────── --}}
+            <div x-show="tab === 'guide'" @style(['display: none' => $tab !== 'guide'])>
+                @if (! $guide || (! $sections && ! $guide->summary))
+                    @if ($canGenerate && ! $hasContent)
+                        {{-- First visit after upload: this is the next step, so
+                             prompt it rather than reporting an absence. --}}
+                        <div class="surface p-8 text-center">
+                            <h3 class="font-medium text-ink">Ready to generate</h3>
+                            <p class="mx-auto mt-1 max-w-md text-sm text-muted">
+                                {{ number_format(mb_strlen($sourceText)) }} characters were extracted from
+                                {{ $material->file_name ?? 'this material' }}. Generate a study guide, flashcards and a
+                                quiz from it.
+                            </p>
+                            <div class="mt-4">
+                                <button type="button" class="btn btn-primary" @click="$dispatch('open-generate')">
+                                    <x-icon name="sparkles" /> Generate content
+                                </button>
+                            </div>
+                        </div>
+                    @elseif (! $hasText)
+                        <x-ui.empty icon="document" title="No text to work from"
+                                    :message="$sourceError ?? 'This material has no text, so nothing can be generated. Edit it and paste the content in.'" />
+                    @else
+                        <x-ui.empty icon="document" title="No study guide"
+                                    message="Nothing has been generated for this material yet." />
+                    @endif
+                @else
+                    <x-study-guide :guide="$guide"
+                                   :sections="$sections"
+                                   :key-terms="$keyTerms"
+                                   :subtitle="collect([$material->subject?->name, $material->classArm?->fullName()])->filter()->join(' · ')"
+                                   :storage-key="'guide:'.$material->id" />
+                @endif
+            </div>
+
+            {{-- ─────────── Flashcards ─────────── --}}
+            <div x-show="tab === 'flashcards'" @style(['display: none' => $tab !== 'flashcards'])>
+                <div x-data="{ mode: 'list', adding: false }">
+                    @if ($material->flashcards->isNotEmpty())
+                        {{-- A reviewer needs to scan every card to approve it,
+                             so the list stays the default; the deck is for
+                             checking how it will actually read. --}}
+                        <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+                            <div class="flex gap-1">
+                                <button type="button" class="tab-btn" :class="mode === 'list' && 'active'"
+                                        @click="mode = 'list'">All cards</button>
+                                <button type="button" class="tab-btn" :class="mode === 'deck' && 'active'"
+                                        @click="mode = 'deck'">Review deck</button>
+                            </div>
+
+                            @if ($canEdit)
+                                <button type="button" class="btn btn-outline btn-sm"
+                                        x-show="mode === 'list' && ! adding" @click="adding = true">
+                                    <x-icon name="plus" /> Add card
+                                </button>
+                            @endif
+                        </div>
+
+                        <div x-show="mode === 'deck'" x-cloak>
+                            <x-flashcard-deck :cards="$material->flashcards" />
+                        </div>
+                    @elseif ($canEdit)
+                        <div class="mb-4 flex justify-end">
+                            <button type="button" class="btn btn-outline btn-sm"
+                                    x-show="! adding" @click="adding = true">
+                                <x-icon name="plus" /> Add card
+                            </button>
+                        </div>
+                    @endif
+
+                    <div x-show="mode === 'list'">
+                        @if ($canEdit)
+                            {{-- New card form, hidden until asked for so it does
+                                 not compete with the content already there. --}}
+                            <form method="POST" action="{{ route('teacher.flashcards.store', $material) }}"
+                                  class="surface mb-3 p-4" x-show="adding" x-cloak>
+                                @csrf
+                                <p class="text-sm font-medium text-ink">New flashcard</p>
+                                <div class="mt-3 grid gap-3 sm:grid-cols-2">
+                                    <x-ui.field label="Front" name="front" required>
+                                        <textarea name="front" rows="3" class="textarea" required
+                                                  placeholder="The question or prompt"></textarea>
+                                    </x-ui.field>
+                                    <x-ui.field label="Back" name="back" required>
+                                        <textarea name="back" rows="3" class="textarea" required
+                                                  placeholder="The answer"></textarea>
+                                    </x-ui.field>
+                                </div>
+                                <div class="mt-3 flex justify-end gap-2">
+                                    <button type="button" class="btn btn-ghost btn-sm" @click="adding = false">Cancel</button>
+                                    <button type="submit" class="btn btn-primary btn-sm">Add card</button>
+                                </div>
+                            </form>
+                        @endif
+
+                        @if ($material->flashcards->isEmpty())
+                            <x-ui.empty icon="layers" title="No flashcards"
+                                        message="None have been generated yet." />
+                        @else
+                            <div class="grid gap-3 sm:grid-cols-2">
+                                @foreach ($material->flashcards as $index => $card)
+                                    <div class="surface p-4" x-data="{ editing: false }">
+                                        {{-- Read view --}}
+                                        <div x-show="! editing">
+                                            <div class="flex items-start justify-between gap-2">
+                                                <span class="text-xs text-faint">Card {{ $index + 1 }}</span>
+                                                @if ($canEdit)
+                                                    <div class="flex shrink-0 gap-1">
+                                                        <button type="button" class="btn-icon" title="Edit card"
+                                                                @click="editing = true">
+                                                            <x-icon name="pencil" />
+                                                        </button>
+                                                        <form method="POST"
+                                                              action="{{ route('teacher.flashcards.destroy', $card) }}"
+                                                              @submit.prevent="confirm('Delete this flashcard?') && $el.submit()">
+                                                            @csrf
+                                                            @method('DELETE')
+                                                            <button type="submit" class="btn-icon text-danger" title="Delete card">
+                                                                <x-icon name="trash" />
+                                                            </button>
+                                                        </form>
+                                                    </div>
+                                                @endif
+                                            </div>
+                                            <div class="mt-1 text-sm font-medium text-ink">{{ $card->front }}</div>
+                                            <div class="mt-2 border-t border-line pt-2 text-sm text-muted">{{ $card->back }}</div>
+                                            @if ($card->tags)
+                                                <div class="mt-2 flex flex-wrap gap-1">
+                                                    @foreach ($card->tags as $tag)
+                                                        <span class="badge">{{ $tag }}</span>
+                                                    @endforeach
+                                                </div>
+                                            @endif
+                                        </div>
+
+                                        {{-- Edit view --}}
+                                        @if ($canEdit)
+                                            <form method="POST" action="{{ route('teacher.flashcards.update', $card) }}"
+                                                  x-show="editing" x-cloak>
+                                                @csrf
+                                                @method('PUT')
+                                                <x-ui.field label="Front" name="front" required>
+                                                    <textarea name="front" rows="3" class="textarea" required>{{ $card->front }}</textarea>
+                                                </x-ui.field>
+                                                <div class="mt-2">
+                                                    <x-ui.field label="Back" name="back" required>
+                                                        <textarea name="back" rows="4" class="textarea" required>{{ $card->back }}</textarea>
+                                                    </x-ui.field>
+                                                </div>
+                                                <div class="mt-3 flex justify-end gap-2">
+                                                    <button type="button" class="btn btn-ghost btn-sm" @click="editing = false">Cancel</button>
+                                                    <button type="submit" class="btn btn-primary btn-sm">Save</button>
+                                                </div>
+                                            </form>
+                                        @endif
+                                    </div>
+                                @endforeach
+                            </div>
+                        @endif
+                    </div>
+                </div>
+            </div>
+
+            {{-- ─────────── Quiz ─────────── --}}
+            <div x-show="tab === 'quiz'" @style(['display: none' => $tab !== 'quiz'])>
+                <div x-data="{ mode: 'list', adding: false }" @cancel-question-edit.stop="adding = false">
+                    @if ($material->questions->isNotEmpty())
+                        {{-- Same split as the flashcards: the answer key is what
+                             a reviewer needs, but running the quiz is the only
+                             way to catch a question that does not work. --}}
+                        <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+                            <div class="flex gap-1">
+                                <button type="button" class="tab-btn" :class="mode === 'list' && 'active'"
+                                        @click="mode = 'list'">Answer key</button>
+                                <button type="button" class="tab-btn" :class="mode === 'quiz' && 'active'"
+                                        @click="mode = 'quiz'">Try the quiz</button>
+                            </div>
+
+                            @if ($canEdit)
+                                <button type="button" class="btn btn-outline btn-sm"
+                                        x-show="mode === 'list' && ! adding" @click="adding = true">
+                                    <x-icon name="plus" /> Add question
+                                </button>
+                            @endif
+                        </div>
+
+                        <div x-show="mode === 'quiz'" x-cloak>
+                            <x-quiz :questions="$material->questions" />
+                        </div>
+                    @elseif ($canEdit)
+                        <div class="mb-4 flex justify-end">
+                            <button type="button" class="btn btn-outline btn-sm"
+                                    x-show="! adding" @click="adding = true">
+                                <x-icon name="plus" /> Add question
+                            </button>
+                        </div>
+                    @endif
+
+                    <div x-show="mode === 'list'">
+                        @if ($canEdit)
+                            <div class="surface mb-3 p-4" x-show="adding" x-cloak>
+                                <x-question-editor :action="route('teacher.questions.store', $material)" />
+                            </div>
+                        @endif
+
+                        @if ($material->questions->isEmpty())
+                            <x-ui.empty icon="clipboard" title="No quiz"
+                                        message="No questions have been generated yet." />
+                        @else
+                            <ol class="space-y-3">
+                                @foreach ($material->questions as $i => $question)
+                                    <li class="surface p-4" x-data="{ editing: false }"
+                                        @cancel-question-edit.stop="editing = false">
+                                        {{-- Read view --}}
+                                        <div class="flex gap-3" x-show="! editing">
+                                            <span class="tnum flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-surface-sunk text-xs text-muted">
+                                                {{ $i + 1 }}
+                                            </span>
+                                            <div class="min-w-0 flex-1">
+                                                <div class="flex items-start justify-between gap-2">
+                                                    <div class="text-sm font-medium text-ink">{{ $question->question }}</div>
+                                                    @if ($canEdit)
+                                                        <div class="flex shrink-0 gap-1">
+                                                            <button type="button" class="btn-icon" title="Edit question"
+                                                                    @click="editing = true">
+                                                                <x-icon name="pencil" />
+                                                            </button>
+                                                            <form method="POST"
+                                                                  action="{{ route('teacher.questions.destroy', $question) }}"
+                                                                  @submit.prevent="confirm('Delete this question?') && $el.submit()">
+                                                                @csrf
+                                                                @method('DELETE')
+                                                                <button type="submit" class="btn-icon text-danger" title="Delete question">
+                                                                    <x-icon name="trash" />
+                                                                </button>
+                                                            </form>
+                                                        </div>
+                                                    @endif
+                                                </div>
+
+                                                <div class="mt-1 flex flex-wrap gap-1">
+                                                    <span class="badge">{{ Str::headline($question->type ?? 'multiple-choice') }}</span>
+                                                    <span class="badge">Difficulty {{ $question->difficulty ?: 1 }}/5</span>
+                                                </div>
+
+                                                <ul class="mt-2 space-y-1">
+                                                    @foreach ((array) $question->options as $index => $option)
+                                                        @php $isCorrect = $index === $question->correct_idx; @endphp
+                                                        <li class="flex items-start gap-2 text-sm {{ $isCorrect ? 'font-medium text-success' : 'text-muted' }}">
+                                                            <span class="w-4 shrink-0 text-xs">{{ $isCorrect ? '✓' : chr(65 + $index) }}</span>
+                                                            <span>{{ $option }}</span>
+                                                        </li>
+                                                    @endforeach
+                                                </ul>
+
+                                                @if ($question->explanation)
+                                                    <p class="mt-2 border-t border-line pt-2 text-xs text-faint">
+                                                        {{ $question->explanation }}
+                                                    </p>
+                                                @endif
+                                            </div>
+                                        </div>
+
+                                        {{-- Edit view --}}
+                                        @if ($canEdit)
+                                            <div x-show="editing" x-cloak>
+                                                <x-question-editor :action="route('teacher.questions.update', $question)"
+                                                                   :question="$question"
+                                                                   method="PUT" />
+                                            </div>
+                                        @endif
+                                    </li>
+                                @endforeach
+                            </ol>
+                        @endif
+                    </div>
+                </div>
+            </div>
+
+            {{-- ─────────── Source ─────────── --}}
+            <div x-show="tab === 'source'" @style(['display: none' => $tab !== 'source'])>
+                <div class="surface p-5">
+                    <dl class="grid gap-3 text-sm sm:grid-cols-2">
+                        <div>
+                            <dt class="text-xs text-faint">Type</dt>
+                            <dd class="text-ink">{{ $material->type }}</dd>
+                        </div>
+                        @if ($material->file_name)
+                            <div>
+                                <dt class="text-xs text-faint">File</dt>
+                                <dd class="text-ink">
+                                    {{ $material->file_name }}
+                                    @if ($material->file_size)
+                                        <span class="text-faint">({{ round($material->file_size / 1024) }} KB)</span>
+                                    @endif
+                                </dd>
+                            </div>
+                        @endif
+                        @if ($material->source_url)
+                            <div class="sm:col-span-2">
+                                <dt class="text-xs text-faint">Link</dt>
+                                <dd><a href="{{ $material->source_url }}" target="_blank" rel="noopener"
+                                       class="break-all text-accent">{{ $material->source_url }}</a></dd>
+                            </div>
+                        @endif
+                    </dl>
+
+                    @if ($material->description)
+                        <div class="mt-4 border-t border-line pt-4">
+                            <div class="text-xs text-faint">Description</div>
+                            <p class="mt-1 text-sm text-muted">{{ $material->description }}</p>
+                        </div>
+                    @endif
+
+                    @if ($hasText)
+                        <details class="mt-4 border-t border-line pt-4">
+                            <summary class="cursor-pointer text-sm text-accent">
+                                Extracted text
+                                <span class="text-xs text-faint">
+                                    ({{ number_format(mb_strlen($sourceText)) }} characters)
+                                </span>
+                            </summary>
+
+                            @if ($material->file_path)
+                                <p class="mt-2 text-xs text-faint">
+                                    Read from the stored file each time content is generated — nothing is
+                                    copied into the database, so improvements to the reader apply here too.
+                                </p>
+                            @endif
+
+                            @if ($material->structured_chars)
+                                <p class="mt-1 text-xs text-faint">
+                                    Sent to the AI as
+                                    {{ number_format($material->structured_chars) }} characters of structured
+                                    JSON — page headers, footers and line breaks removed, which is
+                                    {{ max(0, 100 - (int) round($material->structured_chars / max(1, mb_strlen($sourceText)) * 100)) }}%
+                                    fewer tokens per run.
+                                </p>
+                            @endif
+
+                            <pre class="mt-2 max-h-96 overflow-auto whitespace-pre-wrap rounded-md bg-surface-sunk p-3 text-xs text-muted">{{ $sourceText }}</pre>
+                        </details>
+                    @elseif ($sourceError)
+                        <div class="mt-4 rounded-md border border-danger/30 bg-danger/5 px-3 py-2 text-sm">
+                            <div class="font-medium text-danger">Could not read this file</div>
+                            <p class="mt-1 text-muted">{{ $sourceError }}</p>
+                        </div>
+                    @endif
+                </div>
+            </div>
+
+            {{-- ─────────── Notes ─────────── --}}
+            <div x-show="tab === 'notes'" @style(['display: none' => $tab !== 'notes'])>
+                <div class="max-w-2xl space-y-4">
+                    @if ($material->notes->isEmpty())
+                        <x-ui.empty icon="chat" title="No history yet"
+                                    message="Submissions, approvals and change requests appear here." />
+                    @else
+                        <ol class="space-y-3">
+                            @foreach ($material->notes as $note)
+                                <li class="surface p-4">
+                                    <div class="flex items-center gap-2">
+                                        <x-ui.badge :tone="$note->tone()">{{ $note->label() }}</x-ui.badge>
+                                        <span class="text-xs text-faint">
+                                            {{ $note->user?->name ?? 'System' }} · {{ $note->created_at->diffForHumans() }}
+                                        </span>
+                                    </div>
+                                    <p class="mt-2 text-sm text-muted">{{ $note->content }}</p>
+                                </li>
+                            @endforeach
+                        </ol>
+                    @endif
+
+                    <form method="POST" action="{{ route('learning.materials.notes', $material) }}"
+                          class="surface space-y-2 p-4">
+                        @csrf
+                        <textarea name="content" rows="3" required
+                                  class="w-full rounded-md border border-line bg-surface px-3 py-2 text-sm"
+                                  placeholder="Add a note…"></textarea>
+                        <x-ui.button type="submit" variant="outline" size="sm">Add note</x-ui.button>
+                    </form>
+                </div>
+            </div>
+
+            {{-- ─────────── Links ─────────── --}}
+            <div x-show="tab === 'links'" @style(['display: none' => $tab !== 'links'])>
+                @if ($links->isEmpty())
+                    <x-ui.empty icon="link" title="No linked topics"
+                                message="Related topics appear here once other material in this subject has been processed." />
+                @else
+                    <div class="surface divide-y divide-line">
+                        @foreach ($links as $link)
+                            <div class="flex items-center justify-between gap-4 px-4 py-3">
+                                <span class="truncate text-sm text-ink">{{ $link->linkedTopic->name }}</span>
+                                <span class="shrink-0 text-xs text-faint">
+                                    {{ $link->label() }}
+                                    @if ($link->is_manual)
+                                        · added by a teacher
+                                    @else
+                                        · {{ $link->confidencePercent() }}% confidence
+                                    @endif
+                                </span>
+                            </div>
+                        @endforeach
+                    </div>
+                @endif
+            </div>
+        </div>
+
+        {{-- ── Modals ── --}}
+        @if ($canReview && $awaitingDecision)
+            <div x-data="{ open: false }" @open-changes.window="open = true" x-cloak>
+                <div x-show="open" x-cloak class="fixed inset-0 z-40 bg-black/40" @click="open = false"></div>
+                <div x-show="open" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4">
+                    <div class="surface w-full max-w-md p-5" @click.outside="open = false">
+                        <h3 class="font-semibold text-ink">Request changes</h3>
+                        <p class="mt-1 text-sm text-muted">The teacher sees this note and can revise and resubmit.</p>
+                        <form method="POST" action="{{ route('learning.materials.request-changes', $material) }}"
+                              class="mt-4 space-y-3">
+                            @csrf
+                            <textarea name="note" rows="4" required autofocus
+                                      class="w-full rounded-md border border-line bg-surface px-3 py-2 text-sm"
+                                      placeholder="What needs to change?"></textarea>
+                            <div class="flex justify-end gap-2">
+                                <button type="button" class="btn btn-ghost btn-sm" @click="open = false">Cancel</button>
+                                <button type="submit" class="btn btn-primary btn-sm">Send back</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <div x-data="{ open: false }" @open-reject.window="open = true" x-cloak>
+                <div x-show="open" x-cloak class="fixed inset-0 z-40 bg-black/40" @click="open = false"></div>
+                <div x-show="open" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4">
+                    <div class="surface w-full max-w-md p-5" @click.outside="open = false">
+                        <h3 class="font-semibold text-ink">Reject this material</h3>
+                        <p class="mt-1 text-sm text-muted">Give a reason so the teacher knows why.</p>
+                        <form method="POST" action="{{ route('learning.materials.reject', $material) }}"
+                              class="mt-4 space-y-3">
+                            @csrf
+                            <textarea name="reason" rows="4" required autofocus
+                                      class="w-full rounded-md border border-line bg-surface px-3 py-2 text-sm"
+                                      placeholder="Why is this being rejected?"></textarea>
+                            <div class="flex justify-end gap-2">
+                                <button type="button" class="btn btn-ghost btn-sm" @click="open = false">Cancel</button>
+                                <button type="submit" class="btn btn-danger btn-sm">Confirm rejection</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        @endif
+
+        @if ($canGenerate)
+            <div x-data="{ open: false, count: {{ (int) ($config['questionCount'] ?? config('ai.defaults.question_count', 10)) }} }"
+                 @open-generate.window="open = true" x-cloak>
+                <div x-show="open" x-cloak class="fixed inset-0 z-40 bg-black/40" @click="open = false"></div>
+                <div x-show="open" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4">
+                    <div class="surface w-full max-w-md p-5" @click.outside="open = false">
+                        <h3 class="font-semibold text-ink">
+                            {{ $hasContent ? 'Regenerate content' : 'Generate study content' }}
+                        </h3>
+                        <p class="mt-1 text-sm text-muted">
+                            A study guide, flashcards and a quiz, written from this material.
+                        </p>
+
+                        @if ($hasContent)
+                            <div class="mt-3 rounded-md border border-warning/30 bg-warning/5 px-3 py-2 text-xs text-muted">
+                                This replaces the content you already have for whichever type you pick.
+                            </div>
+                        @endif
+
+                        <form method="POST" action="{{ route('learning.materials.regenerate', $material) }}"
+                              class="mt-4 space-y-4">
+                            @csrf
+
+                            <x-ui.field label="What to generate" name="type">
+                                <select name="type"
+                                        class="w-full rounded-md border border-line bg-surface px-3 py-2 text-sm">
+                                    <option value="generate_all">Everything</option>
+                                    <option value="generate_study_guide">Study guide only</option>
+                                    <option value="generate_flashcards">Flashcards only</option>
+                                    <option value="generate_questions">Quiz only</option>
+                                </select>
+                            </x-ui.field>
+
+                            <x-ui.field label="Quiz questions" name="question_count">
+                                <div class="flex items-center gap-3">
+                                    <input type="range" name="question_count" min="3" max="30"
+                                           x-model="count" class="flex-1">
+                                    <span class="tnum w-8 text-sm text-ink" x-text="count"></span>
+                                </div>
+                            </x-ui.field>
+
+                            <x-ui.field label="Question types" name="question_types">
+                                <div class="space-y-1.5">
+                                    @foreach (['multiple-choice' => 'Multiple choice', 'true-false' => 'True / false', 'fill-blank' => 'Fill in the blank', 'short-answer' => 'Short answer'] as $value => $label)
+                                        <label class="flex items-center gap-2 text-sm">
+                                            <input type="checkbox" name="question_types[]" value="{{ $value }}"
+                                                   @checked(in_array($value, (array) $configuredTypes, true))>
+                                            {{ $label }}
+                                        </label>
+                                    @endforeach
+                                </div>
+                            </x-ui.field>
+
+                            <div class="flex justify-end gap-2 border-t border-line pt-4">
+                                <button type="button" class="btn btn-ghost btn-sm" @click="open = false">Cancel</button>
+                                <button type="submit" class="btn btn-primary btn-sm">
+                                    {{ $hasContent ? 'Regenerate' : 'Generate' }}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        @endif
+
+        @if ($canSubmit)
+            <div x-data="{ open: false }" @open-submit.window="open = true" x-cloak>
+                <div x-show="open" x-cloak class="fixed inset-0 z-40 bg-black/40" @click="open = false"></div>
+                <div x-show="open" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4">
+                    <div class="surface w-full max-w-md p-5" @click.outside="open = false">
+                        <h3 class="font-semibold text-ink">Submit for review</h3>
+                        <p class="mt-1 text-sm text-muted">An administrator will approve or send it back.</p>
+                        <form method="POST" action="{{ route('learning.materials.submit', $material) }}"
+                              class="mt-4 space-y-3">
+                            @csrf
+                            <textarea name="note" rows="3"
+                                      class="w-full rounded-md border border-line bg-surface px-3 py-2 text-sm"
+                                      placeholder="Anything the reviewer should know? (optional)"></textarea>
+                            <div class="flex justify-end gap-2">
+                                <button type="button" class="btn btn-ghost btn-sm" @click="open = false">Cancel</button>
+                                <button type="submit" class="btn btn-primary btn-sm">Submit</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        @endif
+    </div>
+</x-layouts.studyai>

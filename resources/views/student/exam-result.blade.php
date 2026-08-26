@@ -11,17 +11,22 @@
             @foreach($questions as $i => $q)
                 @php
                     $ans = collect($attempt->answers)->firstWhere('question_id', $q->id);
+
+                    // Answers are stored as text, so they read back directly.
+                    $given = $ans['given'] ?? null;
+                    $wasCorrect = (bool) ($ans['correct'] ?? false);
+                    $correct = $paper->correctAnswer($q);
                 @endphp
                 <li class="px-5 py-3">
                     <div class="font-medium">{{ $i + 1 }}. {{ $q->question }}</div>
-                    @if($q->options && is_array($q->options) && count($q->options))
-                        <div class="text-xs text-muted mt-1">
-                            Your answer: {{ isset($ans) && $ans['given'] !== null ? ($q->options[$ans['given']] ?? $ans['given']) : '—' }}
-                            @if(isset($ans) && $ans['correct'])<span class="text-ok"> ✓ correct</span>@else<span class="text-danger"> ✗ incorrect ({{ $q->options[$q->answer] ?? $q->answer }})</span>@endif
-                        </div>
-                    @else
-                        <div class="text-xs text-muted mt-1">Your answer: {{ $ans['given'] ?? '—' }} @if($ans['correct'])✓@else ✗ ({{ $q->answer }})@endif</div>
-                    @endif
+                    <div class="text-xs text-muted mt-1">
+                        Your answer: {{ $given !== null && $given !== '' ? $given : '—' }}
+                        @if($wasCorrect)
+                            <span class="text-ok"> ✓ correct</span>
+                        @else
+                            <span class="text-danger"> ✗ incorrect ({{ $correct }})</span>
+                        @endif
+                    </div>
                     @if($q->explanation)<div class="text-xs text-faint mt-1">{{ $q->explanation }}</div>@endif
                 </li>
             @endforeach

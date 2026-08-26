@@ -1,10 +1,14 @@
-<x-layouts.studyai title="Materials">
-    <div class="flex items-center justify-between mb-4">
-        <span class="font-semibold text-ink">Materials</span>
-        <a href="{{ route('teacher.materials.create') }}" class="px-3 py-1 btn btn-primary text-sm">Upload New</a>
+<x-layouts.studyai title="Study guides"
+                   subtitle="Upload material and AI writes the guide, flashcards and quiz.">
+    <div class="mb-4 flex items-center justify-end">
+        <x-ui.button :href="route('teacher.materials.create')" icon="plus">New study guide</x-ui.button>
     </div>
 
-    @if(session('status'))<div class="text-ok text-sm mb-3">{{ session('status') }}</div>@endif
+    @if (session('status'))
+        <div class="mb-4 rounded-md border border-success/30 bg-success/5 px-4 py-2.5 text-sm text-success">
+            {{ session('status') }}
+        </div>
+    @endif
 
     <div class="surface overflow-x-auto">
         <table class="w-full text-sm">
@@ -23,21 +27,29 @@
                         <td class="px-4 py-2">{{ $m->title }}</td>
                         <td class="px-4 py-2 uppercase text-xs text-faint">{{ $m->type }}</td>
                         <td class="px-4 py-2">
-                            <span class="text-xs px-2 py-0.5 rounded border
-                                @if($m->status==='ready') border-green-200 bg-green-50 text-ok
-                                @elseif($m->status==='processing') border-blue-200 bg-blue-50 text-blue-700
-                                @elseif($m->status==='failed') border-red-200 bg-red-50 text-red-700
-                                @else border-line text-muted @endif">{{ $m->status }}</span>
-                            @if($m->review_status==='pending')<a href="{{ route('teacher.materials.review') }}" class="ml-2 text-xs text-accent">Review</a>@endif
+                            <x-ui.badge :tone="$m->stateTone()">{{ $m->stateLabel() }}</x-ui.badge>
                         </td>
-                        <td class="px-4 py-2">{{ $m->published ? 'Published' : '—' }}</td>
-                        <td class="px-4 py-2 flex gap-2">
-                            <a href="{{ route('teacher.materials.show', $m) }}" class="text-accent text-xs">View</a>
-                            <a href="{{ route('teacher.materials.edit', $m) }}" class="text-muted text-xs">Edit</a>
+                        <td class="px-4 py-2 text-xs text-faint">
+                            {{ $m->published_at?->diffForHumans() ?? '—' }}
+                        </td>
+                        <td class="px-4 py-2">
+                            <div class="flex items-center gap-3">
+                                <a href="{{ route('learning.materials.show', $m) }}" class="text-accent text-xs">Open</a>
+                                <a href="{{ route('teacher.materials.edit', $m) }}" class="text-muted text-xs">Edit</a>
+                                @can('delete', $m)
+                                    <form method="POST" action="{{ route('teacher.materials.destroy', $m) }}"
+                                          x-data
+                                          @submit.prevent="confirm('Delete “{{ addslashes($m->title) }}”? {{ $m->isPublished() ? 'Students will lose access to it immediately. ' : '' }}Its study guide, flashcards and questions go with it. This cannot be undone.') && $el.submit()">
+                                        @csrf
+                                        @method('DELETE')
+                                        <button type="submit" class="text-xs text-danger">Delete</button>
+                                    </form>
+                                @endcan
+                            </div>
                         </td>
                     </tr>
                 @empty
-                    <tr><td colspan="5" class="px-4 py-6 text-center text-faint">No materials yet.</td></tr>
+                    <tr><td colspan="5" class="px-4 py-8 text-center text-faint">No study guides yet — create your first one.</td></tr>
                 @endforelse
             </tbody>
         </table>

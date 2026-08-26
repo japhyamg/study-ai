@@ -8,6 +8,8 @@
         @endif
     </div>
 
+    {{-- Order and option order come from the controller: they are shuffled per
+         attempt when the exam asks for it, and must not be recomputed here. --}}
     @php($questionList = $questions ?? $exam->questions()->orderBy('order')->get())
     @php($totalQ = $questionList->count())
 
@@ -33,21 +35,17 @@
                         </div>
                         @if(!empty($opts))
                             <div class="space-y-1">
-                                @foreach($opts as $idx => $opt)
+                                @foreach($opts as $opt)
                                     <label class="flex items-center gap-2 text-sm p-1 rounded hover:bg-paper-sunk transition-colors">
-                                        <input type="radio" name="{{ $qid }}" value="{{ $idx }}" {{ request()->input($qid) == $idx ? 'checked' : '' }}>
+                                        {{-- Submit the answer text. Options can be shuffled per
+                                             attempt, so a position means nothing on grading. --}}
+                                        <input type="radio" name="{{ $qid }}" value="{{ $opt }}" {{ request()->input($qid) === $opt ? 'checked' : '' }}>
                                         {{ $opt }}
                                     </label>
                                 @endforeach
                             </div>
                         @else
                             <input type="text" name="{{ $qid }}" class="input w-full" placeholder="Your answer" value="{{ request()->input($qid) }}">
-                        @endif
-                        @if($q->explanation)
-                            <details class="mt-2 text-xs text-faint">
-                                <summary class="cursor-pointer text-accent">Explanation</summary>
-                                <div class="mt-1">{{ $q->explanation }}</div>
-                            </details>
                         @endif
                     </div>
                 @endforeach

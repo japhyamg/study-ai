@@ -43,7 +43,7 @@ class MaterialController extends Controller
             'result' => $jobResult,
         ]);
 
-        $material->update(['status' => Material::STATUS_PROCESSING]);
+        $material->transitionTo(Material::STATE_AI_PROCESSING);
 
         // Dispatch to queue; if no queue worker is running, process inline.
         if (config('queue.default') === 'sync') {
