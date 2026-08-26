@@ -27,7 +27,7 @@
         @if($classStats->isEmpty())
             <div class="empty">No classes yet.</div>
         @else
-            <table class="table">
+            <div class="table-wrap"><table class="table">
                 <thead><tr><th>Class</th><th>Students</th><th>Exams</th><th>Attempts</th><th>Avg score</th></tr></thead>
                 <tbody>
                 @foreach($classStats as $c)
@@ -40,7 +40,7 @@
                     </tr>
                 @endforeach
                 </tbody>
-            </table>
+            </table></div>
         @endif
     </div>
 </x-layouts.studyai>

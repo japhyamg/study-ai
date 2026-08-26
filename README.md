@@ -10,7 +10,8 @@ A full-stack study platform (AI-generated flashcards, exams, study guides, space
 
 | Area | Capability |
 |------|------------|
-| **Auth & RBAC** | School-scoped membership with 4 roles: `super_admin`, `admin`, `teacher`, `student`. Role middleware + Laravel Policies. |
+| **Auth & RBAC** | SaaS user separation: one identity table + separate `platform_admins` / `school_admins` / `teachers` / `students` tables. Same login route for everyone, role middleware + policies, optional **TOTP two-factor** with recovery codes. |
+| **Tenancy** | Main domain = platform (super-admin). Each school gets its own subdomain (`{slug}.<central-domain>`); tenant middleware scopes sessions, sign-in and data to the active school. |
 | **Schools & Members** | Super-admin manages schools, AI providers, and global token limits. Admin manages members, classes, subjects, terms, invite codes. |
 | **Classes** | Teacher/admin create classes, assign teachers, enroll students (manual or invite code), link subject + term. |
 | **Exams** | Teacher builds exams (MCQ / true-false / fill-blank / short-answer / essay), publishes them. Students start → take (with countdown timer) → submit → see results & pass/fail. Teacher sees analytics (avg, pass rate, attempts). |
@@ -59,14 +60,41 @@ php artisan serve --host=127.0.0.1 --port=8011
 # open http://127.0.0.1:8011  (redirects to /dashboard → /login)
 ```
 
-> On this machine the configured PHP is Herd's 8.4:
-> `C:/Users/Mcfly/.config/herd/bin/php84/php.exe artisan serve ...`
+> With `APP_CENTRAL_DOMAINS` empty (default) the app runs **path-based** on
+> localhost: the school for each request is resolved from the signed-in user's
+> profile, so everything works without DNS.
+
+### SaaS tenancy (main domain + school subdomains)
+
+See **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** for the full picture:
+
+- The **main domain** hosts the platform: super-admin, shared sign-in, onboarding.
+- Each **school** gets its own subdomain (`https://{slug}.<central-domain>`).
+- One `users` identity table + **separate tables per user type**
+  (`platform_admins`, `school_admins`, `teachers`, `students`) — everyone logs
+  in through the same route.
+- **Two-factor authentication** (TOTP + recovery codes, dependency-free) on
+  every account via the profile page (`/profile`).
+
+To try subdomains locally, map them in your hosts file:
+
+```
+127.0.0.1  studyai.test demo.studyai.test
+```
+
+then set `APP_URL=http://studyai.test`, `APP_CENTRAL_DOMAINS=studyai.test` and:
+
+```bash
+php artisan serve --host=0.0.0.0 --port=8000
+# platform → http://studyai.test:8000      (super admin)
+# school   → http://demo.studyai.test:8000  (admin / teacher / student)
+```
 
 ### Demo accounts (from the seeder)
 
 | Email | Password | Role |
 |-------|----------|------|
-| `super@example.com` | `password` | Super Admin |
+| `super@example.com` | `password` | Super Admin (main domain) |
 | `admin@example.com`  | `password` | School Admin |
 | `teacher@example.com`| `password` | Teacher |
 | `student@example.com`| `password` | Student |
@@ -97,12 +125,23 @@ AI logic lives in:
 ```
 app/
   Http/Controllers/
-    SuperAdminController.php   schools, AI providers, token limits, usage
-    AdminController.php        members, classes, subjects, terms, settings
+    SuperAdminController.php   schools, AI providers, token limits, usage (main domain)
+    AdminController.php        members, classes, subjects, terms, settings (school-scoped)
     TeacherController.php      classes, exams, materials, question bank, analytics
     StudentController.php      dashboard, exams (take/submit/result), flashcards
     TopicController.php        AI topic generation
     MaterialController.php     shared material view + AI generation trigger
+    ProfileController.php      profile page (info, password, 2FA, delete account)
+    TwoFactorController.php    enable / confirm / disable / regenerate 2FA
+    Auth/TwoFactorChallengeController.php  2FA login challenge
+  Http/Middleware/
+    IdentifyTenant.php         resolves central domain vs {school}.subdomain
+    EnsureRole.php             role gate (reads the per-type profile tables)
+    EnsureCentralDomain.php    keeps /super-admin/* on the main domain
+  Support/
+    Totp.php                   dependency-free TOTP (RFC 6238) + recovery codes
+    Tenancy/Tenant.php         request-scoped tenant holder
+    Members/MemberTypes.php    admin/teacher/student → profile model map
   Services/
     AiService.php              LLM client + JSON sanitize/extract + token/cache
     AiContentService.php       material → flashcards/questions/study-guide
@@ -110,18 +149,18 @@ app/
     TokenLimitService.php      quota enforcement
   Jobs/
     GenerateAiContent.php      queued AI job (ShouldQueue)
-  Models/                      ~24 Eloquent models (ClassModel, Exam, Flashcard,
-                               Material, Topic, Subject, Term, QuestionBank, …)
+  Models/                      User (identity) + platform_admins / school_admins /
+                               teachers / students profiles + ~24 domain models
 database/
-  migrations/2026_08_20_000001_study_ai_schema.php   single consolidated schema
+  migrations/2026_08_20_000001_study_ai_schema.php            consolidated schema
+  migrations/2026_08_22_000001_create_role_profiles_and_two_factor.php
+                              per-type tables, 2FA columns, legacy pivot migrated+dropped
   seeders/DatabaseSeeder.php   demo school + 4 users + class + exam + flashcard
 routes/
-  web.php              all web routes, grouped by role (auth + role middleware)
+  web.php              all web routes, grouped by role/tenant
   console.php          scheduler: retry stuck jobs, flashcard-due log
 resources/views/       Full Blade (layouts/studyai, teacher/*, student/*, admin/*)
-tests/
-  Unit/SrsServiceTest.php          SRS correctness
-  Feature/StudentExamFlowTest.php   full exam take→submit→pass flow
+docs/ARCHITECTURE.md   tenancy + user-separation design notes
 ```
 
 ### Key conventions

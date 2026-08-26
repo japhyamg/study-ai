@@ -8,7 +8,7 @@
 
     <form method="POST" action="{{ route('teacher.question-bank.store') }}" class="surface p-5 space-y-3 mb-4">
         @csrf
-        <div class="grid grid-cols-2 gap-3">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
                 <label class="text-sm font-medium">Subject</label>
                 <select name="subject_id" class="w-full border rounded px-2 py-1 text-sm">
@@ -31,7 +31,7 @@
             <label class="text-sm font-medium">Question</label>
             <input name="question" required class="w-full border rounded px-2 py-1 text-sm">
         </div>
-        <div class="grid grid-cols-2 gap-3">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
                 <label class="text-sm font-medium">Answer</label>
                 <input name="answer" required class="w-full border rounded px-2 py-1 text-sm">

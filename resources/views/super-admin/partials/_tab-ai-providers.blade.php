@@ -16,7 +16,7 @@
         </div>
         <form id="createProvider" method="POST" action="{{ route('super-admin.ai-providers.store') }}" class="hidden px-5 py-4 space-y-3">
             @csrf
-            <div class="grid grid-cols-2 gap-3">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div><label class="text-xs text-muted block">Name</label><input name="name" class="w-full border rounded px-2 py-1" required></div>
                 <div><label class="text-xs text-muted block">Model</label><input name="model" class="w-full border rounded px-2 py-1" required></div>
                 <div class="col-span-2"><label class="text-xs text-muted block">Base URL</label><input name="base_url" class="w-full border rounded px-2 py-1" placeholder="https://api.example.com/v1" required></div>
@@ -30,7 +30,7 @@
     {{-- Providers list --}}
     <div class="surface">
         <div class="px-5 py-3 border-b font-semibold text-ink">Providers</div>
-        <table class="w-full text-sm">
+        <div class="table-wrap"><table class="w-full text-sm">
             <thead class="text-left text-muted border-b">
                 <tr><th class="px-5 py-2">Name</th><th class="px-5 py-2">Model</th><th class="px-5 py-2">Base URL</th><th class="px-5 py-2">Status</th><th class="px-5 py-2"></th></tr>
             </thead>
@@ -65,7 +65,7 @@
                     </tr>
                 @endforeach
             </tbody>
-        </table>
+        </table></div>
     </div>
 </div>
 @endif

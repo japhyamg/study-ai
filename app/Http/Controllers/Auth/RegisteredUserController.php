@@ -3,7 +3,9 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
+use App\Models\Student;
 use App\Models\User;
+use App\Support\Tenancy\Tenant;
 use Illuminate\Auth\Events\Registered;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -26,6 +28,11 @@ class RegisteredUserController extends Controller
     /**
      * Handle an incoming registration request.
      *
+     *  - On a SCHOOL SUBDOMAIN: the new account becomes a student of that
+     *    school immediately.
+     *  - On the MAIN DOMAIN: the account starts with no role and is taken to
+     *    onboarding (create a school as its admin, or join via a class code).
+     *
      * @throws ValidationException
      */
     public function store(Request $request): RedirectResponse
@@ -42,10 +49,22 @@ class RegisteredUserController extends Controller
             'password' => Hash::make($request->password),
         ]);
 
+        $school = Tenant::school();
+
+        if ($school) {
+            Student::firstOrCreate([
+                'user_id' => $user->id,
+                'school_id' => $school->id,
+            ]);
+            session(['active_school_id' => $school->id]);
+        }
+
         event(new Registered($user));
 
         Auth::login($user);
 
-        return redirect(route('dashboard', absolute: false));
+        return redirect($school
+            ? route('student.dashboard', absolute: false)
+            : route('dashboard', absolute: false));
     }
 }

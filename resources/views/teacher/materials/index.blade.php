@@ -7,7 +7,7 @@
     @if(session('status'))<div class="text-ok text-sm mb-3">{{ session('status') }}</div>@endif
 
     <div class="surface overflow-x-auto">
-        <table class="w-full text-sm">
+        <div class="table-wrap"><table class="w-full text-sm">
             <thead class="bg-paper-sunk text-left text-muted">
                 <tr>
                     <th class="px-4 py-2">Title</th>
@@ -40,7 +40,7 @@
                     <tr><td colspan="5" class="px-4 py-6 text-center text-faint">No materials yet.</td></tr>
                 @endforelse
             </tbody>
-        </table>
+        </table></div>
     </div>
     {{ $materials->links() }}
 </x-layouts.studyai>

@@ -62,7 +62,7 @@
             <div class="lg:col-span-4">
                 <div class="surface p-4" style="position:sticky; top:1.5rem">
                     <div class="font-medium text-sm text-ink mb-3">Question Navigator</div>
-                    <div class="grid grid-cols-5 gap-2 mb-4">
+                    <div class="grid grid-cols-3 sm:grid-cols-5 gap-2 mb-4">
                         @foreach($questionList as $i => $q)
                             @php($answered = request()->has("q.{$q->id}"))
                             <a href="#q{{ $i }}" class="nav-dot text-center text-xs py-2 rounded"

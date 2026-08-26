@@ -12,7 +12,6 @@ use App\Models\ProcessingJob;
 use App\Models\Question;
 use App\Models\QuestionBank;
 use App\Models\School;
-use App\Models\SchoolMember;
 use App\Models\StudyGuide;
 use App\Models\Subject;
 use App\Models\Term;

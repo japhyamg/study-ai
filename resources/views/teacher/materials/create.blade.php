@@ -8,7 +8,7 @@
 
     <form method="POST" action="{{ route('teacher.materials.store') }}" class="surface p-5 space-y-4 max-w-2xl">
         @csrf
-        <div class="grid grid-cols-2 gap-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
                 <label class="text-sm font-medium">Class (optional)</label>
                 <select name="class_id" class="w-full border rounded px-2 py-1 text-sm">
@@ -32,7 +32,7 @@
             <label class="text-sm font-medium">Description (optional)</label>
             <textarea name="description" rows="2" class="w-full border rounded px-2 py-1 text-sm">{{ old('description') }}</textarea>
         </div>
-        <div class="grid grid-cols-2 gap-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
                 <label class="text-sm font-medium">Type</label>
                 <select name="type" class="w-full border rounded px-2 py-1 text-sm">
@@ -79,7 +79,7 @@
                 </div>
                 <div>
                     <label class="text-sm font-medium">Question Types</label>
-                    <div class="grid grid-cols-2 gap-2">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
                         @php $qtypes = old('question_types', ['multiple-choice']); @endphp
                         @foreach([['multiple-choice','Multiple Choice'],['true-false','True / False'],['fill-blank','Fill in the Blank'],['short-answer','Short Answer']] as [$val,$label])
                             @php $sel = in_array($val, $qtypes); @endphp

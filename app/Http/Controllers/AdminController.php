@@ -7,12 +7,18 @@ use App\Models\ClassModel;
 use App\Models\ExamAttempt;
 use App\Models\InviteCode;
 use App\Models\School;
-use App\Models\SchoolMember;
+use App\Models\SchoolAdmin;
+use App\Models\Student;
 use App\Models\Subject;
+use App\Models\Teacher;
 use App\Models\Term;
 use App\Models\User;
+use App\Support\Members\MemberTypes;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\View\View;
 use Illuminate\Validation\Rule;
@@ -37,20 +43,20 @@ class AdminController extends Controller
 
         $stats = [
             'classes' => ClassModel::where('school_id', $schoolId)->count(),
-            'students' => SchoolMember::where('school_id', $schoolId)->where('role', SchoolMember::ROLE_STUDENT)->count(),
+            'students' => Student::where('school_id', $schoolId)->count(),
+            'teachers' => Teacher::where('school_id', $schoolId)->count(),
             'exams' => \App\Models\Exam::where('school_id', $schoolId)->count(),
             'avgScore' => round((float) \App\Models\ExamAttempt::whereHas('exam', fn ($q) => $q->where('school_id', $schoolId))
                 ->where('submitted', true)->whereNotNull('percentage')->avg('percentage') ?: 0),
         ];
 
-        // Recent activity: students joining classes, new exams, new questions
+        // Recent activity: members joining the school, new exams
         $recentActivity = collect();
-        $memberJoins = SchoolMember::where('school_id', $schoolId)->orderBy('created_at', 'desc')->limit(5)->get();
-        foreach ($memberJoins as $m) {
+        foreach ($this->schoolMemberRows($schoolId, limit: 5) as $row) {
             $recentActivity->push([
                 'type' => 'join',
-                'user' => $m->user?->name ?? 'New member',
-                'time' => $m->created_at->diffForHumans(),
+                'user' => $row['user']?->name ?? 'New member',
+                'time' => $row['created_at']->diffForHumans(),
             ]);
         }
         $recentExamsTmp = \App\Models\Exam::where('school_id', $schoolId)->orderBy('created_at', 'desc')->limit(5)->get();
@@ -138,9 +144,9 @@ class AdminController extends Controller
         $school = $this->school();
         $subjects = Subject::where('school_id', $school?->id)->orderBy('name')->get();
         $terms = Term::where('school_id', $school?->id)->orderBy('name')->get();
-        $teachers = SchoolMember::with('user')
+        $teachers = Teacher::with('user')
             ->where('school_id', $school?->id)
-            ->where('role', SchoolMember::ROLE_TEACHER)
+            ->orderBy('created_at')
             ->get();
         return view('admin.classes.create', compact('subjects', 'terms', 'teachers'));
     }
@@ -175,9 +181,9 @@ class AdminController extends Controller
         $school = $this->school();
         $subjects = Subject::where('school_id', $school?->id)->orderBy('name')->get();
         $terms = Term::where('school_id', $school?->id)->orderBy('name')->get();
-        $teachers = SchoolMember::with('user')
+        $teachers = Teacher::with('user')
             ->where('school_id', $school?->id)
-            ->where('role', SchoolMember::ROLE_TEACHER)
+            ->orderBy('created_at')
             ->get();
         return view('admin.classes.edit', compact('class', 'subjects', 'terms', 'teachers'));
     }
@@ -221,7 +227,7 @@ class AdminController extends Controller
         ]);
         ClassEnrollment::updateOrCreate(
             ['class_id' => $class->id, 'user_id' => $data['user_id']],
-            ['role' => SchoolMember::ROLE_STUDENT, 'enrolled_at' => now()]
+            ['role' => User::ROLE_STUDENT, 'enrolled_at' => now()]
         );
         return back()->with('status', 'Student enrolled.');
     }
@@ -257,21 +263,79 @@ class AdminController extends Controller
         return back()->with('status', 'Invite code generated.');
     }
 
-    // ── Members ──
+    // ── Members (admins / teachers / students — separate tables, one screen) ──
+
+    /**
+     * Unified member rows for a school across the per-type tables.
+     *
+     * @return Collection<int, array{id: string, type: string, user: ?User, created_at: \Carbon\CarbonInterface}>
+     */
+    protected function schoolMemberRows(?string $schoolId, ?string $type = null, ?string $search = null, int $limit = 0): Collection
+    {
+        if (! $schoolId) {
+            return collect();
+        }
+
+        $rows = collect();
+
+        $types = $type ? [$type] : MemberTypes::valid();
+
+        foreach ($types as $t) {
+            $modelClass = MemberTypes::model($t);
+            $modelClass::with('user')
+                ->where('school_id', $schoolId)
+                ->orderByDesc('created_at')
+                ->get()
+                ->each(function ($profile) use (&$rows, $t) {
+                    $rows->push([
+                        'id' => $profile->id,
+                        'type' => $t,
+                        'user' => $profile->user,
+                        'created_at' => $profile->created_at,
+                    ]);
+                });
+        }
+
+        if ($search) {
+            $needle = mb_strtolower($search);
+            $rows = $rows->filter(fn ($row) => str_contains(mb_strtolower($row['user']?->name ?? ''), $needle)
+                || str_contains(mb_strtolower($row['user']?->email ?? ''), $needle));
+        }
+
+        $rows = $rows->sortByDesc(fn ($row) => $row['created_at']);
+
+        return $limit > 0 ? $rows->take($limit) : $rows->values();
+    }
+
     public function members(Request $request): View
     {
         $school = $this->school();
         $search = trim((string) $request->get('search', ''));
-        $query = SchoolMember::with(['user'])
-            ->where('school_id', $school?->id);
-        if ($search) {
-            $query->whereHas('user', function ($q) use ($search) {
-                $q->where('name', 'ilike', "%{$search}%")
-                  ->orWhere('email', 'ilike', "%{$search}%");
-            });
+        $type = $request->get('type');
+        if (! in_array($type, MemberTypes::valid(), true)) {
+            $type = null;
         }
-        $members = $query->orderBy('created_at', 'desc')->paginate(25)->withQueryString();
-        return view('admin.members.index', compact('members', 'search'));
+
+        $rows = $this->schoolMemberRows($school?->id, $type, $search);
+
+        $perPage = 25;
+        $page = max(1, (int) $request->get('page', 1));
+        $members = new LengthAwarePaginator(
+            $rows->forPage($page, $perPage)->values(),
+            $rows->count(),
+            $perPage,
+            $page,
+            ['path' => $request->url(), 'query' => $request->query()]
+        );
+
+        $counts = [
+            'all' => $this->schoolMemberRows($school?->id)->count(),
+            'admin' => SchoolAdmin::where('school_id', $school?->id)->count(),
+            'teacher' => Teacher::where('school_id', $school?->id)->count(),
+            'student' => Student::where('school_id', $school?->id)->count(),
+        ];
+
+        return view('admin.members.index', compact('members', 'search', 'type', 'counts'));
     }
 
     public function inviteMember(Request $request): RedirectResponse
@@ -280,7 +344,7 @@ class AdminController extends Controller
         $data = $request->validate([
             'email' => 'required|email',
             'name' => 'nullable|string|max:255',
-            'role' => ['required', Rule::in([SchoolMember::ROLE_ADMIN, SchoolMember::ROLE_TEACHER, SchoolMember::ROLE_STUDENT])],
+            'role' => ['required', Rule::in(MemberTypes::valid())],
         ]);
 
         $user = User::firstOrCreate(
@@ -291,12 +355,9 @@ class AdminController extends Controller
             ]
         );
 
-        SchoolMember::updateOrCreate(
-            ['user_id' => $user->id, 'school_id' => $school?->id],
-            ['role' => $data['role']]
-        );
+        $this->createMemberProfile($user->id, $school?->id, $data['role']);
 
-        return back()->with('status', 'Member invited.');
+        return back()->with('status', ucfirst($data['role']).' invited.');
     }
 
     public function bulkInviteMembers(Request $request): RedirectResponse
@@ -304,7 +365,7 @@ class AdminController extends Controller
         $school = $this->school();
         $data = $request->validate([
             'emails' => 'required|string',
-            'role' => ['required', Rule::in([SchoolMember::ROLE_ADMIN, SchoolMember::ROLE_TEACHER, SchoolMember::ROLE_STUDENT])],
+            'role' => ['required', Rule::in(MemberTypes::valid())],
         ]);
 
         $emails = array_filter(array_map('trim', preg_split('/[\s,;]+/', $data['emails'])));
@@ -320,36 +381,75 @@ class AdminController extends Controller
                     'password' => Hash::make(substr(md5(uniqid((string) mt_rand(), true)), 0, 12)),
                 ]
             );
-            SchoolMember::updateOrCreate(
-                ['user_id' => $user->id, 'school_id' => $school?->id],
-                ['role' => $data['role']]
-            );
+            $this->createMemberProfile($user->id, $school?->id, $data['role']);
             $count++;
         }
 
         return back()->with('status', "{$count} members invited.");
     }
 
-    public function removeMember(SchoolMember $member): RedirectResponse
+    /** Create (or move) a member profile row in the table for the given role. */
+    protected function createMemberProfile(string $userId, ?string $schoolId, string $role): void
+    {
+        $modelClass = MemberTypes::model($role);
+        if (! $modelClass || ! $schoolId) {
+            return;
+        }
+
+        $modelClass::firstOrCreate([
+            'user_id' => $userId,
+            'school_id' => $schoolId,
+        ]);
+    }
+
+    public function removeMember(Request $request, string $type, string $id): RedirectResponse
     {
         $school = $this->school();
-        if ($member->school_id !== $school?->id) {
-            abort(403);
+
+        $modelClass = MemberTypes::model($type);
+        if (! $modelClass) {
+            abort(404);
         }
-        $member->delete();
+
+        $profile = $modelClass::with('user')->where('school_id', $school?->id)->findOrFail($id);
+
+        DB::transaction(function () use ($profile, $school, $type) {
+            // Students lose their class enrollments at this school when removed.
+            if ($type === 'student' && $profile->user) {
+                ClassEnrollment::where('user_id', $profile->user->id)
+                    ->whereIn('class_id', ClassModel::where('school_id', $school?->id)->pluck('id'))
+                    ->delete();
+            }
+
+            $profile->delete();
+        });
+
         return back()->with('status', 'Member removed.');
     }
 
-    public function updateMemberRole(Request $request, SchoolMember $member): RedirectResponse
+    public function updateMemberRole(Request $request, string $type, string $id): RedirectResponse
     {
         $school = $this->school();
-        if ($member->school_id !== $school?->id) {
-            abort(403);
+
+        $modelClass = MemberTypes::model($type);
+        if (! $modelClass) {
+            abort(404);
         }
+
+        $profile = $modelClass::where('school_id', $school?->id)->findOrFail($id);
+
         $data = $request->validate([
-            'role' => ['required', Rule::in([SchoolMember::ROLE_ADMIN, SchoolMember::ROLE_TEACHER, SchoolMember::ROLE_STUDENT])],
+            'role' => ['required', Rule::in(MemberTypes::valid())],
         ]);
-        $member->update(['role' => $data['role']]);
+
+        // Role changes move the row between the per-type tables.
+        if ($data['role'] !== $type) {
+            DB::transaction(function () use ($profile, $school, $data) {
+                $this->createMemberProfile($profile->user_id, $school?->id, $data['role']);
+                $profile->delete();
+            });
+        }
+
         return back()->with('status', 'Role updated.');
     }
 

@@ -11,8 +11,14 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        // Resolve the tenant (central domain vs {school}.domain) for every web request.
+        $middleware->web(append: [
+            \App\Http\Middleware\IdentifyTenant::class,
+        ]);
+
         $middleware->alias([
             'role' => \App\Http\Middleware\EnsureRole::class,
+            'central' => \App\Http\Middleware\EnsureCentralDomain::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

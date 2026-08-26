@@ -13,7 +13,7 @@
             </div>
             <form id="createSchool" method="POST" action="{{ route('super-admin.schools.store') }}" class="hidden px-5 py-4 border-b bg-paper-sunk space-y-3">
                 @csrf
-                <div class="grid grid-cols-3 gap-3">
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div><label class="text-xs text-muted block">Name</label><input name="name" class="w-full border rounded px-2 py-1" required></div>
                     <div><label class="text-xs text-muted block">Slug</label><input name="slug" class="w-full border rounded px-2 py-1" required></div>
                     <div><label class="text-xs text-muted block">Logo URL</label><input name="logo" class="w-full border rounded px-2 py-1"></div>
@@ -33,7 +33,7 @@
         </div>
         <form id="createSchool" method="POST" action="{{ route('super-admin.schools.store') }}" class="hidden px-5 py-4 border-b bg-paper-sunk space-y-3">
             @csrf
-            <div class="grid grid-cols-3 gap-3">
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div><label class="text-xs text-muted block">Name</label><input name="name" class="w-full border rounded px-2 py-1" required></div>
                 <div><label class="text-xs text-muted block">Slug</label><input name="slug" class="w-full border rounded px-2 py-1" required></div>
                 <div><label class="text-xs text-muted block">Logo URL</label><input name="logo" class="w-full border rounded px-2 py-1"></div>
@@ -45,7 +45,7 @@
     {{-- Recent schools list --}}
     <div class="surface">
         <div class="px-5 py-3 border-b font-semibold text-ink">Recent Schools</div>
-        <table class="w-full text-sm">
+        <div class="table-wrap"><table class="w-full text-sm">
             <thead class="text-left text-muted border-b">
                 <tr><th class="px-5 py-2">Name</th><th class="px-5 py-2">Slug</th><th class="px-5 py-2">Members</th><th class="px-5 py-2">Created</th><th class="px-5 py-2"></th></tr>
             </thead>
@@ -60,7 +60,7 @@
                     </tr>
                 @endforeach
             </tbody>
-        </table>
+        </table></div>
     </div>
 </div>
 @endif

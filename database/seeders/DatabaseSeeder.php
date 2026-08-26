@@ -8,10 +8,13 @@ use App\Models\Exam;
 use App\Models\ExamQuestion;
 use App\Models\Flashcard;
 use App\Models\Material;
+use App\Models\PlatformAdmin;
 use App\Models\QuestionBank;
 use App\Models\School;
-use App\Models\SchoolMember;
+use App\Models\SchoolAdmin;
+use App\Models\Student;
 use App\Models\Subject;
+use App\Models\Teacher;
 use App\Models\Term;
 use App\Models\User;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
@@ -24,7 +27,7 @@ class DatabaseSeeder extends Seeder
 
     public function run(): void
     {
-        // Super admin user
+        // ── Platform super-admin (main domain) ──
         $super = User::firstOrCreate(
             ['email' => 'super@example.com'],
             [
@@ -32,47 +35,43 @@ class DatabaseSeeder extends Seeder
                 'password' => Hash::make('password'),
             ]
         );
+        PlatformAdmin::firstOrCreate(['user_id' => $super->id], ['is_owner' => true]);
 
-        // A demo school
+        // ── A demo school (workspace at {slug}.<central-domain>, e.g. demo.studyai.test) ──
         $school = School::firstOrCreate(
-            ['slug' => 'demo-school'],
+            ['slug' => 'demo'],
             ['name' => 'Demo School', 'logo' => null]
         );
 
-        SchoolMember::firstOrCreate(
-            ['user_id' => $super->id, 'school_id' => $school->id],
-            ['role' => SchoolMember::ROLE_SUPER_ADMIN]
-        );
-
-        // Admin user
+        // School administrator (school_admins table)
         $admin = User::firstOrCreate(
             ['email' => 'admin@example.com'],
             ['name' => 'School Admin', 'password' => Hash::make('password')]
         );
-        SchoolMember::firstOrCreate(
-            ['user_id' => $admin->id, 'school_id' => $school->id],
-            ['role' => SchoolMember::ROLE_ADMIN]
-        );
+        SchoolAdmin::firstOrCreate([
+            'user_id' => $admin->id,
+            'school_id' => $school->id,
+        ]);
 
-        // Teacher user
+        // Teacher (teachers table)
         $teacher = User::firstOrCreate(
             ['email' => 'teacher@example.com'],
             ['name' => 'Demo Teacher', 'password' => Hash::make('password')]
         );
-        SchoolMember::firstOrCreate(
-            ['user_id' => $teacher->id, 'school_id' => $school->id],
-            ['role' => SchoolMember::ROLE_TEACHER]
-        );
+        Teacher::firstOrCreate([
+            'user_id' => $teacher->id,
+            'school_id' => $school->id,
+        ], ['staff_no' => 'T-001']);
 
-        // Student user
+        // Student (students table)
         $student = User::firstOrCreate(
             ['email' => 'student@example.com'],
             ['name' => 'Demo Student', 'password' => Hash::make('password')]
         );
-        SchoolMember::firstOrCreate(
-            ['user_id' => $student->id, 'school_id' => $school->id],
-            ['role' => SchoolMember::ROLE_STUDENT]
-        );
+        Student::firstOrCreate([
+            'user_id' => $student->id,
+            'school_id' => $school->id,
+        ], ['admission_no' => 'S-001', 'level' => 'SS 2']);
 
         // Demo class (teacher-owned) for student enrollment + published exam/flashcard
         $class = ClassModel::firstOrCreate(

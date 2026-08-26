@@ -20,10 +20,10 @@
     </div>
 
     <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div class="bg-paper border border-line" style="border-radius:3px; padding:1.25rem"><div class="text-sm text-muted">Total Tokens</div><div class="text-2xl font-bold text-ink mt-1">{{ number_format($usageTeachersSummary['totalTokens']) }}</div></div>
-        <div class="bg-paper border border-line" style="border-radius:3px; padding:1.25rem"><div class="text-sm text-muted">Total Cost</div><div class="text-2xl font-bold text-ink mt-1">${{ $usageTeachersSummary['totalCost'] }}</div></div>
-        <div class="bg-paper border border-line" style="border-radius:3px; padding:1.25rem"><div class="text-sm text-muted">Requests</div><div class="text-2xl font-bold text-ink mt-1">{{ number_format($usageTeachersSummary['totalRequests']) }}</div></div>
-        <div class="bg-paper border border-line" style="border-radius:3px; padding:1.25rem"><div class="text-sm text-muted">Active Schools</div><div class="text-2xl font-bold text-ink mt-1">{{ $usageTeachersSummary['schoolCount'] }}</div></div>
+        <div class="stat"><div class="text-sm text-muted">Total Tokens</div><div class="text-2xl font-bold text-ink mt-1">{{ number_format($usageTeachersSummary['totalTokens']) }}</div></div>
+        <div class="stat"><div class="text-sm text-muted">Total Cost</div><div class="text-2xl font-bold text-ink mt-1">${{ $usageTeachersSummary['totalCost'] }}</div></div>
+        <div class="stat"><div class="text-sm text-muted">Requests</div><div class="text-2xl font-bold text-ink mt-1">{{ number_format($usageTeachersSummary['totalRequests']) }}</div></div>
+        <div class="stat"><div class="text-sm text-muted">Active Schools</div><div class="text-2xl font-bold text-ink mt-1">{{ $usageTeachersSummary['schoolCount'] }}</div></div>
     </div>
 
     @if(empty($schoolsData))
@@ -31,7 +31,7 @@
     @else
     <div class="surface">
         <div class="px-5 py-3 border-b font-semibold text-ink">Usage by School</div>
-        <table class="w-full text-sm">
+        <div class="table-wrap"><table class="w-full text-sm">
             <thead class="text-left text-muted border-b">
                 <tr><th class="px-5 py-2">School</th><th class="px-5 py-2">Tokens</th><th class="px-5 py-2">Cost</th><th class="px-5 py-2">Requests</th><th class="px-5 py-2">Teachers</th></tr>
             </thead>
@@ -55,7 +55,7 @@
                     @endif
                 @endforeach
             </tbody>
-        </table>
+        </table></div>
     </div>
     @endif
 </div>

@@ -10,10 +10,13 @@ use App\Models\Material;
 use App\Models\PlatformSetting;
 use App\Models\Question;
 use App\Models\School;
-use App\Models\SchoolMember;
+use App\Models\SchoolAdmin;
+use App\Models\Student;
+use App\Models\Teacher;
 use App\Models\TeacherTokenLimit;
 use App\Models\TokenUsage;
 use App\Models\User;
+use App\Support\Members\MemberTypes;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -25,6 +28,39 @@ class SuperAdminController extends Controller
     public function __construct()
     {
         $this->middleware('role:super_admin');
+        $this->middleware('central'); // platform pages live on the main domain
+    }
+
+    /**
+     * Lightweight (user_id, school_id, role) tuples across the per-type
+     * tables — used for token-limit / usage listings.
+     *
+     * @return array<int, object>
+     */
+    protected function staffProfiles(array $types = ['teacher']): array
+    {
+        $types = array_intersect($types, MemberTypes::valid());
+
+        $rows = [];
+
+        if (in_array('teacher', $types, true)) {
+            foreach (Teacher::get() as $t) {
+                $rows[] = (object) ['user_id' => $t->user_id, 'school_id' => $t->school_id, 'role' => 'teacher'];
+            }
+        }
+        if (in_array('admin', $types, true)) {
+            foreach (SchoolAdmin::get() as $a) {
+                $rows[] = (object) ['user_id' => $a->user_id, 'school_id' => $a->school_id, 'role' => 'admin'];
+            }
+        }
+
+        return $rows;
+    }
+
+    /** Eager-load member counts for a School query across the per-type tables. */
+    protected function withMemberCounts($query)
+    {
+        return $query->withCount(['admins', 'teachers', 'students']);
     }
 
     // ── Dashboard / stats ──
@@ -40,7 +76,7 @@ class SuperAdminController extends Controller
             'totalFlashcards' => Flashcard::count(),
         ];
 
-        $recentSchools = School::withCount('members')->orderBy('created_at', 'desc')->limit(10)->get();
+        $recentSchools = $this->withMemberCounts(School::query())->orderBy('created_at', 'desc')->limit(10)->get();
 
         // Analytics tab data
         $analyticsStats = null;
@@ -50,8 +86,8 @@ class SuperAdminController extends Controller
             $analyticsStats = [
                 'totalSchools' => School::count(),
                 'totalUsers' => User::count(),
-                'totalTeachers' => SchoolMember::where('role', SchoolMember::ROLE_TEACHER)->count(),
-                'totalStudents' => SchoolMember::where('role', SchoolMember::ROLE_STUDENT)->count(),
+                'totalTeachers' => Teacher::count(),
+                'totalStudents' => Student::count(),
                 'totalMaterials' => Material::count(),
                 'totalExams' => Exam::count(),
                 'totalFlashcards' => Flashcard::count(),
@@ -110,7 +146,7 @@ class SuperAdminController extends Controller
                 'totalRequests' => TokenUsage::where('created_at', '>=', $cutoff)->count(),
                 'schoolCount' => TokenUsage::where('created_at', '>=', $cutoff)->whereNotNull('school_id')->distinct()->count('school_id'),
             ];
-            $teacherMembers = SchoolMember::where('role', SchoolMember::ROLE_TEACHER)->get();
+            $teacherMembers = $this->staffProfiles(['teacher']);
             $seen = []; $teachers = [];
             foreach ($teacherMembers as $m) { if (isset($seen[$m->user_id])) continue; $seen[$m->user_id] = true; $teachers[] = $m; }
             $userIds = array_column($teachers, 'user_id');
@@ -132,7 +168,7 @@ class SuperAdminController extends Controller
         $defaultLimit = 1000000;
         if (in_array($activeTab, ['token-limits'])) {
             $defaultLimit = (int) (PlatformSetting::where('key', 'teacher_default_monthly_limit')->value('value') ?? 1000000);
-            $teacherLimitMembers = SchoolMember::whereIn('role', [SchoolMember::ROLE_TEACHER, SchoolMember::ROLE_ADMIN])->get();
+            $teacherLimitMembers = $this->staffProfiles(['teacher', 'admin']);
             $seen2 = []; $tlist = [];
             foreach ($teacherLimitMembers as $m) { if (isset($seen2[$m->user_id])) continue; $seen2[$m->user_id] = true; $tlist[] = $m; }
             $uids = array_column($tlist, 'user_id');
@@ -159,7 +195,7 @@ class SuperAdminController extends Controller
         // Schools tab data
         $schoolList = null;
         if (in_array($activeTab, ['schools'])) {
-            $schoolList = School::withCount('members')->orderBy('created_at', 'desc')->limit(10)->get();
+            $schoolList = $this->withMemberCounts(School::query())->orderBy('created_at', 'desc')->limit(10)->get();
         }
 
         return view('super-admin.dashboard', compact(
@@ -176,7 +212,7 @@ class SuperAdminController extends Controller
     public function schools(Request $request): View
     {
         $search = trim((string) $request->get('search', ''));
-        $query = School::withCount('members');
+        $query = $this->withMemberCounts(School::query());
         if ($search) {
             $query->where(function ($q) use ($search) {
                 $q->where('name', 'ilike', "%{$search}%")
@@ -223,23 +259,50 @@ class SuperAdminController extends Controller
     // ── School detail (members + role management) ──
     public function schoolDetail(School $school): View
     {
-        $school->load(['members.user', 'classes', 'materials', 'exams']);
-        $memberCount = $school->members->count();
+        $school->load(['admins.user', 'teachers.user', 'students.user', 'classes', 'materials', 'exams']);
+
+        $members = collect()
+            ->merge($school->admins->map(fn ($p) => ['id' => $p->id, 'type' => 'admin', 'user' => $p->user, 'created_at' => $p->created_at]))
+            ->merge($school->teachers->map(fn ($p) => ['id' => $p->id, 'type' => 'teacher', 'user' => $p->user, 'created_at' => $p->created_at]))
+            ->merge($school->students->map(fn ($p) => ['id' => $p->id, 'type' => 'student', 'user' => $p->user, 'created_at' => $p->created_at]))
+            ->sortByDesc('created_at')
+            ->values();
+
+        $memberCount = $members->count();
         $materialCount = $school->materials->count();
         $examCount = $school->exams->count();
-        $flashcardCount = Flashcard::where('user_id', $school->members->pluck('user_id')->toArray())->count();
-        return view('super-admin.school-detail', compact('school', 'memberCount', 'materialCount', 'examCount', 'flashcardCount'));
+        $flashcardCount = Flashcard::where('user_id', $members->pluck('user.id')->filter()->values()->toArray())->count();
+
+        return view('super-admin.school-detail', compact('school', 'members', 'memberCount', 'materialCount', 'examCount', 'flashcardCount'));
     }
 
-    public function updateMemberRoleInSchool(Request $request, School $school, SchoolMember $member): RedirectResponse
+    public function updateMemberRoleInSchool(Request $request, School $school, string $type, string $id): RedirectResponse
     {
-        if ($member->school_id !== $school->id) {
+        $modelClass = MemberTypes::model($type);
+        if (! $modelClass) {
             abort(404);
         }
+
+        $profile = $modelClass::where('school_id', $school->id)->findOrFail($id);
+
         $data = $request->validate([
-            'role' => ['required', Rule::in([SchoolMember::ROLE_TEACHER, SchoolMember::ROLE_ADMIN, SchoolMember::ROLE_STUDENT])],
+            'role' => ['required', Rule::in(MemberTypes::valid())],
         ]);
-        $member->update(['role' => $data['role']]);
+
+        // Role changes move the row between the per-type tables.
+        if ($data['role'] !== $type) {
+            DB::transaction(function () use ($profile, $school, $data) {
+                $target = MemberTypes::model($data['role']);
+                if ($target) {
+                    $target::firstOrCreate([
+                        'user_id' => $profile->user_id,
+                        'school_id' => $school->id,
+                    ]);
+                }
+                $profile->delete();
+            });
+        }
+
         return back()->with('status', 'Member role updated.');
     }
 
@@ -305,8 +368,7 @@ class SuperAdminController extends Controller
     {
         $search = strtolower(trim((string) $request->get('search', '')));
 
-        $teacherMembers = SchoolMember::whereIn('role', [SchoolMember::ROLE_TEACHER, SchoolMember::ROLE_ADMIN])
-            ->get();
+        $teacherMembers = $this->staffProfiles(['teacher', 'admin']);
 
         $seen = [];
         $teachers = [];
@@ -403,8 +465,8 @@ class SuperAdminController extends Controller
         $stats = [
             'totalSchools' => School::count(),
             'totalUsers' => User::count(),
-            'totalTeachers' => SchoolMember::where('role', SchoolMember::ROLE_TEACHER)->count(),
-            'totalStudents' => SchoolMember::where('role', SchoolMember::ROLE_STUDENT)->count(),
+            'totalTeachers' => Teacher::count(),
+            'totalStudents' => Student::count(),
             'totalMaterials' => Material::count(),
             'totalExams' => Exam::count(),
             'totalFlashcards' => Flashcard::count(),
@@ -481,7 +543,7 @@ class SuperAdminController extends Controller
         $schools = School::whereIn('id', $schoolIds)->get()->keyBy('id');
 
         // teacher token usage (month-to-date) for expansion
-        $teacherMembers = SchoolMember::whereIn('role', [SchoolMember::ROLE_TEACHER])->get();
+        $teacherMembers = $this->staffProfiles(['teacher']);
         $seen = [];
         $teachers = [];
         foreach ($teacherMembers as $m) {
