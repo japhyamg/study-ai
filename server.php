@@ -16,4 +16,12 @@ if ($uri !== '/' && file_exists($public . $uri) && ! is_dir($public . $uri)) {
     return false; // Let the built-in server serve the file as-is.
 }
 
+// Serve index.html for real directories (e.g. /downloads/), which Laravel
+// would otherwise capture and redirect.
+if ($uri !== '/' && is_dir($public . $uri) && file_exists(rtrim($public . $uri, '/') . '/index.html')) {
+    header('Content-Type: text/html; charset=UTF-8');
+    readfile(rtrim($public . $uri, '/') . '/index.html');
+    return true;
+}
+
 require_once $public . '/index.php';
