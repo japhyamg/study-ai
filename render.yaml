@@ -1,0 +1,73 @@
+# Render Blueprint for Study AI.
+#
+# In the Render dashboard: New > Blueprint, point it at this repo, and it
+# will create the web service and Postgres database defined below.
+#
+# NOTE ON THE FREE TIER: free Postgres databases expire 30 days after
+# creation, and free web services spin down after 15 minutes idle (the
+# next request takes ~1 minute to wake them). Both are fine for a demo;
+# see DEPLOY.md before relying on this for anything long-lived.
+
+databases:
+  - name: study-ai-db
+    databaseName: study_ai
+    user: study_ai
+    plan: free
+
+services:
+  - type: web
+    name: study-ai
+    runtime: docker
+    plan: free
+    region: oregon
+    branch: arena/01a06c3e-study-ai
+    healthCheckPath: /up
+    autoDeploy: false
+    envVars:
+      - key: APP_KEY
+        # MUST be set manually in the Render dashboard before the first
+        # request. Laravel requires a 32-byte key in `base64:...` form,
+        # which Render's generateValue does NOT produce. Generate one with:
+        #   php artisan key:generate --show
+        # and paste the whole `base64:...` string. See DEPLOY.md.
+        sync: false
+      - key: APP_ENV
+        value: production
+      - key: APP_DEBUG
+        value: "false"
+      - key: LOG_CHANNEL
+        value: stderr
+      - key: LOG_LEVEL
+        value: info
+
+      # Database — wired to the Postgres instance above.
+      - key: DB_CONNECTION
+        value: pgsql
+      # config/database.php reads DB_URL (Laravel's convention), not the
+      # DATABASE_URL name Render uses by default.
+      - key: DB_URL
+        fromDatabase:
+          name: study-ai-db
+          property: connectionString
+
+      # Free instances have an ephemeral filesystem, so anything that
+      # would normally hit local disk goes to the database instead.
+      - key: SESSION_DRIVER
+        value: database
+      - key: CACHE_STORE
+        value: database
+      - key: QUEUE_CONNECTION
+        value: database
+
+      - key: SESSION_SECURE_COOKIE
+        value: "true"
+      - key: MAIL_MAILER
+        value: log
+
+      # Migrations run on every boot; seeding is opt-in. Flip this to
+      # "true" for the first deploy to get the demo accounts, then set it
+      # back to "false" so you are not re-seeding on every restart.
+      - key: RUN_MIGRATIONS
+        value: "true"
+      - key: RUN_SEEDERS
+        value: "false"
