@@ -15,7 +15,7 @@
                 ['analytics', 'Analytics'],
                 ['token-usage', 'Token Usage'],
                 ['token-limits', 'Token Limits'],
-                ['usage-teachers', 'Usage &amp; Teachers'],
+                ['usage-teachers', 'Usage & Teachers'],
                 ['ai-providers', 'AI Providers'],
                 ['schools', 'Schools'],
             ];
