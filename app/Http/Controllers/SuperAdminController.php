@@ -22,6 +22,19 @@ use Illuminate\View\View;
 
 class SuperAdminController extends Controller
 {
+    /**
+     * Portable "date only" SQL expression (Postgres uses TO_CHAR, SQLite/MySQL differ).
+     */
+    protected static function dateExpr(string $column = 'created_at'): string
+    {
+        return match (DB::connection()->getDriverName()) {
+            'sqlite' => "strftime('%Y-%m-%d', {$column})",
+            'mysql', 'mariadb' => "DATE_FORMAT({$column}, '%Y-%m-%d')",
+            'sqlsrv' => "FORMAT({$column}, 'yyyy-MM-dd')",
+            default => "TO_CHAR({$column}, 'YYYY-MM-DD')",
+        };
+    }
+
     public function __construct()
     {
         $this->middleware('role:super_admin');
@@ -89,7 +102,7 @@ class SuperAdminController extends Controller
                 'avgTokensPerRequest' => (int) ((clone $tq)->count() > 0 ? (clone $tq)->sum('total_tokens') / (clone $tq)->count() : 0),
             ];
             $byOperation = (clone $tq)->select('operation', DB::raw('SUM(total_tokens) as tokens'), DB::raw('SUM(cost) as cost'), DB::raw('COUNT(*) as count'))->groupBy('operation')->get()->keyBy('operation');
-            $byDay = (clone $tq)->select(DB::raw("TO_CHAR(created_at, 'YYYY-MM-DD') as date"), DB::raw('SUM(total_tokens) as tokens'), DB::raw('SUM(cost) as cost'), DB::raw('COUNT(*) as count'))->groupBy('date')->orderBy('date')->get()->keyBy('date');
+            $byDay = (clone $tq)->select(DB::raw(self::dateExpr()." as date"), DB::raw('SUM(total_tokens) as tokens'), DB::raw('SUM(cost) as cost'), DB::raw('COUNT(*) as count'))->groupBy('date')->orderBy('date')->get()->keyBy('date');
         }
 
         // Usage & Teachers tab data
@@ -560,7 +573,7 @@ class SuperAdminController extends Controller
         $schoolNames = School::whereIn('id', $schoolIds)->pluck('name', 'id');
 
         // by day
-        $byDay = (clone $q)->select(DB::raw("TO_CHAR(created_at, 'YYYY-MM-DD') as date"),
+        $byDay = (clone $q)->select(DB::raw(self::dateExpr()." as date"),
             DB::raw('SUM(total_tokens) as tokens'), DB::raw('SUM(cost) as cost'),
             DB::raw('COUNT(*) as count'))->groupBy('date')->orderBy('date')->get()->keyBy('date');
 
