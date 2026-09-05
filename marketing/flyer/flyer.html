@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>StudyAI — Flyer</title>
+<style>
+/* ==========================================================================
+   StudyAI marketing flyer — A4 portrait, print spec.
+   Follows the product's own design language: warm paper ground, ink text,
+   hairline rules, ONE accent (burnt amber). No gradients, no drop shadows,
+   no pill radii, no stock imagery. Type: Fraunces (display) + Geist (text).
+   ========================================================================== */
+
+@font-face { font-family:"Fraunces"; src:url("fonts/fraunces-latin-400-normal.woff2") format("woff2"); font-weight:400; font-display:block; }
+@font-face { font-family:"Fraunces"; src:url("fonts/fraunces-latin-600-normal.woff2") format("woff2"); font-weight:600; font-display:block; }
+@font-face { font-family:"Fraunces"; src:url("fonts/fraunces-latin-700-normal.woff2") format("woff2"); font-weight:700; font-display:block; }
+@font-face { font-family:"Geist"; src:url("fonts/geist-sans-latin-400-normal.woff2") format("woff2"); font-weight:400; font-display:block; }
+@font-face { font-family:"Geist"; src:url("fonts/geist-sans-latin-500-normal.woff2") format("woff2"); font-weight:500; font-display:block; }
+@font-face { font-family:"Geist"; src:url("fonts/geist-sans-latin-600-normal.woff2") format("woff2"); font-weight:600; font-display:block; }
+
+:root{
+  --paper:#FBFAF7;
+  --paper-sunk:#F4F2EC;
+  --ink:#181613;
+  --ink-soft:#57534B;
+  --ink-faint:#8C877C;
+  --line:#E5E1D8;
+  --line-strong:#D6D1C5;
+  --accent:#C2410C;
+  --accent-weak:#FCEFE6;
+}
+
+*{margin:0;padding:0;box-sizing:border-box;}
+
+@page{ size:A4; margin:0; }
+
+html,body{ background:#8a8a8a; }
+
+.page{
+  width:210mm; height:297mm;
+  background:var(--paper);
+  color:var(--ink);
+  font-family:"Geist",system-ui,sans-serif;
+  font-size:9.6pt; line-height:1.5;
+  position:relative; overflow:hidden;
+  margin:0 auto;
+  -webkit-font-smoothing:antialiased;
+  page-break-after:always;
+}
+
+/* Top hairline accent rule */
+.topbar{ height:4.2mm; background:var(--accent); }
+
+.pad{ padding:0 16mm; }
+
+/* ---------------- masthead ---------------- */
+.masthead{ display:flex; align-items:baseline; justify-content:space-between;
+           padding-top:9mm; padding-bottom:0; }
+.logo{ font-family:"Fraunces",Georgia,serif; font-weight:700; font-size:19pt;
+       letter-spacing:-0.02em; }
+.logo em{ font-style:normal; color:var(--accent); }
+.eyebrow{ font-size:7.2pt; letter-spacing:0.18em; text-transform:uppercase;
+          color:var(--ink-faint); font-weight:500; }
+
+/* ---------------- hero ---------------- */
+.hero{ padding-top:10mm; }
+h1{
+  font-family:"Fraunces",Georgia,serif;
+  font-weight:600; font-size:33pt; line-height:1.06;
+  letter-spacing:-0.022em; max-width:150mm;
+}
+h1 .accent{ color:var(--accent); }
+.standfirst{
+  margin-top:6.5mm; max-width:132mm;
+  font-size:11.4pt; line-height:1.52; color:var(--ink-soft);
+}
+.rule{ height:1px; background:var(--line); margin:9mm 0 0; }
+
+/* ---------------- stat strip ---------------- */
+.stats{ display:grid; grid-template-columns:repeat(3,1fr); }
+.stat{ padding:6.5mm 0 6.5mm 0; border-right:1px solid var(--line); padding-right:8mm; }
+.stat:first-child{ padding-left:0; }
+.stat:last-child{ border-right:none; padding-left:8mm; }
+.stat:nth-child(2){ padding-left:8mm; }
+.stat .k{ font-family:"Fraunces",Georgia,serif; font-weight:600;
+          font-size:20pt; line-height:1; letter-spacing:-0.02em; }
+.stat .v{ margin-top:2.2mm; font-size:8.8pt; color:var(--ink-soft); line-height:1.45; }
+
+/* ---------------- screenshot showcase ---------------- */
+.showcase{ margin-top:0; border-top:1px solid var(--line); padding-top:8mm; }
+.shot-main{
+  width:100%; border:1px solid var(--line-strong);
+  display:block; background:#fff;
+}
+.caption{ margin-top:2.6mm; font-size:7.6pt; color:var(--ink-faint);
+          letter-spacing:0.02em; }
+
+/* ---------------- feature columns ---------------- */
+.features{ display:grid; grid-template-columns:repeat(3,1fr); gap:8mm;
+           margin-top:8.5mm; }
+.feat .tick{ width:9mm; height:1.6px; background:var(--accent); margin-bottom:3.2mm; }
+.feat h3{ font-family:"Fraunces",Georgia,serif; font-weight:600;
+          font-size:11.6pt; letter-spacing:-0.01em; margin-bottom:2.4mm; }
+.feat p{ font-size:8.9pt; line-height:1.52; color:var(--ink-soft); }
+
+/* ---------------- footer ---------------- */
+.footer{
+  position:absolute; left:0; right:0; bottom:0;
+  border-top:1px solid var(--line);
+  padding:5.5mm 16mm 6mm;
+  display:flex; justify-content:space-between; align-items:flex-end;
+  background:var(--paper);
+}
+.footer .cta{ font-family:"Fraunces",Georgia,serif; font-weight:600;
+              font-size:12.4pt; letter-spacing:-0.01em; }
+.footer .cta span{ color:var(--accent); font-family:"Geist",sans-serif; font-weight:500; }
+.footer .contact{ text-align:right; font-size:8.4pt; color:var(--ink-soft);
+                  line-height:1.65; }
+.footer .contact strong{ font-weight:600; color:var(--ink); }
+
+/* ==================== PAGE 2 ==================== */
+.p2head{ padding-top:11mm; }
+.kicker{ font-size:7.2pt; letter-spacing:0.18em; text-transform:uppercase;
+         color:var(--accent); font-weight:600; margin-bottom:3.5mm; }
+h2{ font-family:"Fraunces",Georgia,serif; font-weight:600; font-size:21pt;
+    letter-spacing:-0.018em; line-height:1.14; }
+.sub{ margin-top:4mm; font-size:10pt; color:var(--ink-soft); max-width:140mm; }
+
+/* role rows */
+.roles{ margin-top:8mm; border-top:1px solid var(--line); }
+.role{ display:grid; grid-template-columns:34mm 1fr; gap:7mm;
+       padding:5.6mm 0; border-bottom:1px solid var(--line); }
+.role .who{ }
+.role .who .nm{ font-family:"Fraunces",Georgia,serif; font-weight:600;
+                font-size:11.4pt; letter-spacing:-0.01em; }
+.role .who .rl{ margin-top:1.2mm; font-size:7.6pt; color:var(--ink-faint);
+                letter-spacing:0.1em; text-transform:uppercase; }
+.role .what{ font-size:9.1pt; line-height:1.55; color:var(--ink-soft); }
+.role .what b{ color:var(--ink); font-weight:600; }
+
+/* two-up screenshots */
+.duo{ display:grid; grid-template-columns:1fr 1fr; gap:6mm; margin-top:8mm; }
+.duo figure{ }
+.duo img{ width:100%; border:1px solid var(--line-strong); display:block; background:#fff; }
+.duo figcaption{ margin-top:2.4mm; font-size:7.6pt; color:var(--ink-faint); }
+
+/* closing band */
+.band{ margin-top:8.5mm; background:var(--ink); color:#fff;
+       padding:8mm 9mm; }
+.band h3{ font-family:"Fraunces",Georgia,serif; font-weight:600; font-size:15pt;
+          letter-spacing:-0.015em; margin-bottom:3mm; }
+.band p{ font-size:9.4pt; line-height:1.58; color:#C9C4BD; max-width:130mm; }
+.band .line{ height:1.6px; width:11mm; background:var(--accent); margin-bottom:5mm; }
+</style>
+</head>
+<body>
+
+<!-- ============================ PAGE 1 ============================ -->
+<div class="page">
+  <div class="topbar"></div>
+
+  <div class="pad">
+    <div class="masthead">
+      <div class="logo">Study<em>AI</em></div>
+      <div class="eyebrow">Teaching &amp; Learning Platform</div>
+    </div>
+
+    <div class="hero">
+      <h1>Turn one set of notes into<br>a <span class="accent">complete study pack.</span></h1>
+      <p class="standfirst">
+        StudyAI helps teachers generate flashcards, exam questions and study guides
+        from material they already have — reviewed and approved before a single
+        student sees it.
+      </p>
+    </div>
+
+    <div class="rule"></div>
+
+    <div class="stats">
+      <div class="stat">
+        <div class="k">Minutes</div>
+        <div class="v">Build a full revision pack from one lesson note, instead of an evening's work.</div>
+      </div>
+      <div class="stat">
+        <div class="k">Teacher-led</div>
+        <div class="v">Nothing generated reaches a student until a teacher reviews and publishes it.</div>
+      </div>
+      <div class="stat">
+        <div class="k">Budgeted</div>
+        <div class="v">Every AI request is metered per teacher and school, with hard spending limits.</div>
+      </div>
+    </div>
+
+    <div class="showcase">
+      <img class="shot-main" src="named/teacher-material.png" alt="Material with AI generation">
+      <div class="caption">Generate flashcards, questions, study guides and images from a single teaching material.</div>
+    </div>
+
+    <div class="features">
+      <div class="feat">
+        <div class="tick"></div>
+        <h3>For teachers</h3>
+        <p>Classes, materials, exams and a shared question bank in one place — with AI doing the repetitive preparation.</p>
+      </div>
+      <div class="feat">
+        <div class="tick"></div>
+        <h3>For students</h3>
+        <p>A clear view of classes, upcoming exams and flashcards scheduled by spaced repetition for real retention.</p>
+      </div>
+      <div class="feat">
+        <div class="tick"></div>
+        <h3>For leadership</h3>
+        <p>Multi-school administration, role-based access and full visibility of AI usage and cost.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <div class="cta">Book a live walkthrough <span>&rarr;</span></div>
+    <div class="contact">
+      <strong>StudyAI</strong><br>
+      hello@studyai.example &nbsp;·&nbsp; +234 000 000 0000
+    </div>
+  </div>
+</div>
+
+<!-- ============================ PAGE 2 ============================ -->
+<div class="page">
+  <div class="topbar"></div>
+
+  <div class="pad">
+    <div class="p2head">
+      <div class="kicker">One platform, four roles</div>
+      <h2>Everyone signs in to the workspace<br>built for their job.</h2>
+      <p class="sub">
+        Access is enforced on the server, not hidden in the interface — and every
+        school's data is fully isolated from every other.
+      </p>
+    </div>
+
+    <div class="roles">
+      <div class="role">
+        <div class="who"><div class="nm">Super Admin</div><div class="rl">Platform owner</div></div>
+        <div class="what"><b>Schools, AI providers, token budgets, cross-school analytics.</b>
+          Onboard a new school without touching code, choose the AI provider, and set
+          the spending ceiling before costs are incurred.</div>
+      </div>
+      <div class="role">
+        <div class="who"><div class="nm">School Admin</div><div class="rl">Head / registrar</div></div>
+        <div class="what"><b>Members, classes, subjects, terms and school analytics.</b>
+          Invite staff and students in bulk, assign roles, structure the curriculum
+          and track engagement across every cohort.</div>
+      </div>
+      <div class="role">
+        <div class="who"><div class="nm">Teacher</div><div class="rl">Classroom staff</div></div>
+        <div class="what"><b>Materials, AI generation, exams and the question bank.</b>
+          Turn notes into study resources, build assessments question by question,
+          and reuse a library the whole school contributes to.</div>
+      </div>
+      <div class="role">
+        <div class="who"><div class="nm">Student</div><div class="rl">Learner</div></div>
+        <div class="what"><b>Classes, exams, flashcards and study tools.</b>
+          A dashboard that shows exactly what to do next, with cards that resurface
+          precisely what they keep getting wrong.</div>
+      </div>
+    </div>
+
+    <div class="duo">
+      <figure>
+        <img src="named/student-dashboard-crop.png" alt="Student dashboard">
+        <figcaption>Students see classes, exams due and flashcards at a glance.</figcaption>
+      </figure>
+      <figure>
+        <img src="named/super-token-usage-crop.png" alt="AI token usage and cost">
+        <figcaption>Leadership sees exactly where AI spend is going.</figcaption>
+      </figure>
+    </div>
+
+    <div class="band">
+      <div class="line"></div>
+      <h3>See it running with your own subjects.</h3>
+      <p>
+        Every screen shown here is the working product, not a mockup. We can load
+        your curriculum and walk your team through it end to end in under an hour.
+      </p>
+    </div>
+  </div>
+
+  <div class="footer">
+    <div class="cta">studyai.example</div>
+    <div class="contact">
+      <strong>Book a walkthrough</strong><br>
+      hello@studyai.example &nbsp;·&nbsp; +234 000 000 0000
+    </div>
+  </div>
+</div>
+
+</body>
+</html>
