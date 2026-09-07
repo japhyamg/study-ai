@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>StudyAI for school owners, Eazy-Learn</title>
+<style>
+/* ===========================================================================
+   StudyAI advertising flyer, A4, aimed at SCHOOL OWNERS AND PROPRIETORS.
+   Angle: control, cost and reputation, not pupil delight.
+   Character render is generated; ALL type and the logo are real vectors.
+   Poppins + Arimo. Indigo ground, orange reserved for the call to action.
+   No em dashes.
+   =========================================================================== */
+@font-face{font-family:"Poppins";src:url("fonts/poppins-latin-400-normal.woff2") format("woff2");font-weight:400;font-display:block;}
+@font-face{font-family:"Poppins";src:url("fonts/poppins-latin-500-normal.woff2") format("woff2");font-weight:500;font-display:block;}
+@font-face{font-family:"Poppins";src:url("fonts/poppins-latin-600-normal.woff2") format("woff2");font-weight:600;font-display:block;}
+@font-face{font-family:"Poppins";src:url("fonts/poppins-latin-700-normal.woff2") format("woff2");font-weight:700;font-display:block;}
+@font-face{font-family:"Poppins";src:url("fonts/poppins-latin-800-normal.woff2") format("woff2");font-weight:800;font-display:block;}
+@font-face{font-family:"Arimo";src:url("fonts/arimo-latin-400-normal.woff2") format("woff2");font-weight:400;font-display:block;}
+@font-face{font-family:"Arimo";src:url("fonts/arimo-latin-500-normal.woff2") format("woff2");font-weight:500;font-display:block;}
+@font-face{font-family:"Arimo";src:url("fonts/arimo-latin-600-normal.woff2") format("woff2");font-weight:600;font-display:block;}
+@font-face{font-family:"Arimo";src:url("fonts/arimo-latin-700-normal.woff2") format("woff2");font-weight:700;font-display:block;}
+
+:root{
+  --indigo:#4B47C9;
+  --indigo-lt:#6864ED;
+  --ink:#141527;
+  --orange:#FF7425;
+  --green:#33CC79;
+  --cream:#FBF9F4;
+  --dim:rgba(255,255,255,.80);
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+@page{ size:A4; margin:0; }
+html,body{ background:#6f6f6f; }
+
+.page{
+  width:210mm; height:297mm; position:relative; overflow:hidden;
+  background:var(--indigo); color:#fff;
+  font-family:"Arimo",sans-serif; -webkit-font-smoothing:antialiased;
+}
+
+/* ---- hero ---- */
+.hero{ position:absolute; inset:0 0 auto 0; height:154mm; overflow:hidden; }
+.hero img{ width:100%; height:100%; object-fit:cover; object-position:62% 34%; display:block; }
+/* She sits right of frame, so the scrim is weighted to the LEFT for type. */
+.hero .scrim{
+  position:absolute; inset:0;
+  background:
+    linear-gradient(100deg, rgba(16,17,38,.90) 0%, rgba(16,17,38,.74) 34%, rgba(16,17,38,.20) 56%, rgba(16,17,38,0) 72%),
+    linear-gradient(180deg, rgba(16,17,38,.52) 0%, rgba(16,17,38,0) 26%),
+    linear-gradient(0deg, var(--indigo) 0.5%, rgba(75,71,201,.88) 6%, rgba(75,71,201,0) 24%);
+}
+
+/* ---- masthead ---- */
+.mast{ position:absolute; top:9mm; left:13mm; right:13mm;
+       display:flex; align-items:flex-start; justify-content:space-between; z-index:3; }
+.mast img{ height:12mm; width:auto; display:block; }
+.tag{
+  font-family:"Poppins",sans-serif; font-weight:600; font-size:7.2pt;
+  letter-spacing:.22em; text-transform:uppercase; color:#fff;
+  border:1px solid rgba(255,255,255,.55); border-radius:20mm; padding:2.1mm 4.6mm;
+  white-space:nowrap; margin-top:1.5mm;
+}
+
+/* ---- headline, left column ---- */
+.head{ position:absolute; top:32mm; left:13mm; width:100mm; z-index:3; }
+.kicker{
+  font-family:"Poppins",sans-serif; font-weight:600; font-size:7.6pt;
+  letter-spacing:.2em; text-transform:uppercase; color:#fff; margin-bottom:4mm;
+  text-shadow:0 1px 10px rgba(15,16,32,.6);
+}
+.kicker .bar{ display:inline-block; width:7mm; height:1.1mm; background:var(--orange);
+  vertical-align:middle; margin-right:2.6mm; margin-top:-0.6mm; }
+h1{
+  font-family:"Poppins",sans-serif; font-weight:800; font-size:26.5pt; line-height:1.06;
+  letter-spacing:-.028em; text-shadow:0 1px 16px rgba(15,16,32,.5);
+}
+h1 em{ font-style:normal; color:#FFD9BE; }
+.sub{
+  margin-top:5mm; font-size:9.9pt; line-height:1.52; color:#fff; max-width:92mm;
+  text-shadow:0 1px 12px rgba(15,16,32,.6);
+}
+
+/* ---- lower band ---- */
+.body{ position:absolute; top:154mm; left:0; right:0; bottom:0; padding:0 13mm; z-index:2; }
+
+.lead{
+  font-family:"Poppins",sans-serif; font-weight:600; font-size:11pt;
+  letter-spacing:-.012em; margin-top:5.5mm; margin-bottom:5mm; color:#fff;
+}
+.lead span{ color:#FFC9A6; }
+
+.grid{ display:grid; grid-template-columns:repeat(2,1fr); gap:4.2mm 8mm; }
+.it{ display:flex; gap:3.2mm; }
+.it .tick{
+  flex:0 0 4.6mm; height:4.6mm; margin-top:.6mm; border-radius:50%;
+  background:var(--green); position:relative;
+}
+.it .tick::after{
+  content:""; position:absolute; left:1.5mm; top:1.1mm;
+  width:1.5mm; height:2.4mm; border:solid #10331F; border-width:0 .55mm .55mm 0;
+  transform:rotate(42deg);
+}
+.it h3{ font-family:"Poppins",sans-serif; font-weight:600; font-size:9.8pt;
+        margin-bottom:1.2mm; letter-spacing:-.01em; }
+.it p{ font-size:8.2pt; line-height:1.45; color:var(--dim); }
+
+.money{
+  margin-top:5.5mm;
+  background:rgba(255,255,255,.10);
+  border:1px solid rgba(255,255,255,.22);
+  border-radius:2mm; padding:4.4mm 5.5mm;
+  display:grid; grid-template-columns:1.35fr 1fr 1fr; gap:6mm; align-items:center;
+}
+.money .q{
+  font-family:"Poppins",sans-serif; font-weight:600; font-size:9.4pt;
+  line-height:1.4; color:#fff;
+}
+.money .q span{ color:#FFC9A6; }
+.money .m b{
+  display:block; font-family:"Poppins",sans-serif; font-weight:800;
+  font-size:15pt; line-height:1; color:#fff; margin-bottom:1.4mm; letter-spacing:-.02em;
+}
+.money .m span{ font-size:7.9pt; line-height:1.4; color:var(--dim); }
+
+/* ---- call to action ---- */
+.cta{
+  position:absolute; left:0; right:0; bottom:0;
+  background:var(--cream); color:var(--ink);
+  padding:6.5mm 13mm 6mm;
+  display:flex; align-items:center; justify-content:space-between;
+}
+.cta .l h5{
+  font-family:"Poppins",sans-serif; font-weight:800; font-size:14.4pt;
+  letter-spacing:-.02em; margin-bottom:1.8mm; color:var(--ink);
+}
+.cta .l p{ font-size:8.6pt; color:#5A5B6E; }
+.btn{
+  display:inline-block; margin-top:3.4mm;
+  background:var(--orange); color:#fff;
+  font-family:"Poppins",sans-serif; font-weight:700; font-size:9.6pt;
+  letter-spacing:.05em; text-transform:uppercase;
+  padding:3.4mm 7mm; border-radius:1.6mm;
+}
+.cta .r{ text-align:right; font-size:9pt; line-height:1.85; color:var(--ink); }
+.cta .r .w{ font-family:"Poppins",sans-serif; font-weight:700; font-size:10.6pt;
+            color:var(--indigo-lt); }
+.cta .r .a{ font-size:7.6pt; color:#7A7B8C; line-height:1.5; margin-top:1.6mm; }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="hero">
+    <img src="art4k/hero-owner-print.jpg" alt="School proprietor reviewing StudyAI">
+    <div class="scrim"></div>
+  </div>
+
+  <div class="mast">
+    <img src="Eazy-learn-white.png" alt="Eazy-Learn">
+    <div class="tag">StudyAI</div>
+  </div>
+
+  <div class="head">
+    <div class="kicker"><span class="bar"></span>For school owners</div>
+    <h1>Better results.<br>No new staff.<br><em>No runaway bill.</em></h1>
+    <p class="sub">
+      StudyAI turns the lesson notes your teachers already write into
+      flashcards, exam questions and study guides. You set the monthly spending
+      limit. Nothing reaches a pupil until a teacher approves it.
+    </p>
+  </div>
+
+  <div class="body">
+    <div class="lead">What a proprietor actually gets: <span>control, not another subscription you cannot see.</span></div>
+
+    <div class="grid">
+      <div class="it"><div class="tick"></div><div>
+        <h3>A hard cap on AI spend</h3>
+        <p>Set a monthly limit per teacher. The system enforces it automatically, so the bill cannot surprise you.</p></div></div>
+      <div class="it"><div class="tick"></div><div>
+        <h3>Nothing published unchecked</h3>
+        <p>Every generated question stays a draft until one of your teachers reads and approves it.</p></div></div>
+      <div class="it"><div class="tick"></div><div>
+        <h3>One dashboard for the school</h3>
+        <p>Every class, every teacher, every subject and every naira spent, on one screen.</p></div></div>
+      <div class="it"><div class="tick"></div><div>
+        <h3>More teaching, less preparing</h3>
+        <p>Teachers keep the hours they used to lose to typing revision material by hand.</p></div></div>
+      <div class="it"><div class="tick"></div><div>
+        <h3>Your syllabus, your teachers</h3>
+        <p>Built from your own notes, so it matches what your school actually teaches.</p></div></div>
+      <div class="it"><div class="tick"></div><div>
+        <h3>Something to show parents</h3>
+        <p>Structured revision material for every class, and exam results you can point to.</p></div></div>
+    </div>
+
+    <div class="money">
+      <div class="q">A term of revision material for <span>less than the price of one textbook.</span></div>
+      <div class="m"><b>You set it</b><span>Monthly limit per teacher, fixed by the school</span></div>
+      <div class="m"><b>Free demo</b><span>Loaded with your own subjects and classes</span></div>
+    </div>
+  </div>
+
+  <div class="cta">
+    <div class="l">
+      <h5>See it running on your own school</h5>
+      <p>We set it up with your subjects, then you decide. No obligation.</p>
+      <div class="btn">Call +234 (0) 814 175 2518</div>
+    </div>
+    <div class="r">
+      <div class="w">www.eazy-learn.com</div>
+      <div>hello@eazy-learn.com</div>
+      <div class="a">Moshood Abiola Rd, Garki Area 1,<br>Abuja, Federal Capital Territory</div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>
