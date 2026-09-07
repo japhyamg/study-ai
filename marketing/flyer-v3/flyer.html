@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>StudyAI by Eazy-Learn, advertising flyer</title>
+<style>
+/* ===========================================================================
+   StudyAI advertising flyer, A4 portrait.
+   The 3D character is a generated render; ALL type and the logo are real
+   vector assets composited on top, so nothing is garbled.
+   Type: Poppins (display) + Arimo (text), matching eazy-learn.com.
+   Colour: indigo #6864ED (trust) as the ground, warm orange #FF7425 reserved
+   almost entirely for the call to action, per contrast/isolation principle.
+   No em dashes anywhere.
+   =========================================================================== */
+@font-face{font-family:"Poppins";src:url("fonts/poppins-latin-400-normal.woff2") format("woff2");font-weight:400;font-display:block;}
+@font-face{font-family:"Poppins";src:url("fonts/poppins-latin-500-normal.woff2") format("woff2");font-weight:500;font-display:block;}
+@font-face{font-family:"Poppins";src:url("fonts/poppins-latin-600-normal.woff2") format("woff2");font-weight:600;font-display:block;}
+@font-face{font-family:"Poppins";src:url("fonts/poppins-latin-700-normal.woff2") format("woff2");font-weight:700;font-display:block;}
+@font-face{font-family:"Poppins";src:url("fonts/poppins-latin-800-normal.woff2") format("woff2");font-weight:800;font-display:block;}
+@font-face{font-family:"Arimo";src:url("fonts/arimo-latin-400-normal.woff2") format("woff2");font-weight:400;font-display:block;}
+@font-face{font-family:"Arimo";src:url("fonts/arimo-latin-500-normal.woff2") format("woff2");font-weight:500;font-display:block;}
+@font-face{font-family:"Arimo";src:url("fonts/arimo-latin-600-normal.woff2") format("woff2");font-weight:600;font-display:block;}
+@font-face{font-family:"Arimo";src:url("fonts/arimo-latin-700-normal.woff2") format("woff2");font-weight:700;font-display:block;}
+
+:root{
+  --indigo:#6864ED;
+  --indigo-dp:#4B47C9;
+  --ink:#141527;
+  --orange:#FF7425;
+  --green:#33CC79;
+  --cream:#FBF9F4;
+  --dim:rgba(255,255,255,.80);
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+@page{ size:A4; margin:0; }
+html,body{ background:#6f6f6f; }
+
+.page{
+  width:210mm; height:297mm; position:relative; overflow:hidden;
+  background:var(--indigo); color:#fff;
+  font-family:"Arimo",sans-serif; -webkit-font-smoothing:antialiased;
+}
+
+/* ---- hero photograph, top ~52% ---- */
+.hero{ position:absolute; inset:0 0 auto 0; height:172mm; overflow:hidden; }
+.hero img{ width:100%; height:100%; object-fit:cover; object-position:52% 30%; display:block; }
+/* Scrim: keeps the top-left type legible over the render without dulling her face. */
+.hero .scrim{
+  position:absolute; inset:0;
+  background:
+    linear-gradient(180deg, rgba(20,21,39,.70) 0%, rgba(20,21,39,.30) 30%, rgba(20,21,39,0) 52%),
+    linear-gradient(0deg, var(--indigo) 0.5%, rgba(104,100,237,.86) 6%, rgba(104,100,237,0) 26%);
+}
+
+/* ---- masthead ---- */
+.mast{ position:absolute; top:9mm; left:13mm; right:13mm;
+       display:flex; align-items:flex-start; justify-content:space-between; z-index:3; }
+.mast img{ height:12mm; width:auto; display:block; }
+.tag{
+  font-family:"Poppins",sans-serif; font-weight:600; font-size:7.2pt;
+  letter-spacing:.22em; text-transform:uppercase; color:#fff;
+  border:1px solid rgba(255,255,255,.55); border-radius:20mm; padding:2.1mm 4.6mm;
+  white-space:nowrap; margin-top:1.5mm;
+}
+
+/* ---- headline sits in the render's negative space ---- */
+.head{ position:absolute; top:30mm; left:13mm; width:104mm; z-index:3; }
+.kicker .bar{ display:inline-block; width:7mm; height:1.1mm; background:var(--orange);
+  vertical-align:middle; margin-right:2.6mm; margin-top:-0.6mm; }
+.kicker{
+  font-family:"Poppins",sans-serif; font-weight:600; font-size:8pt;
+  letter-spacing:.2em; text-transform:uppercase; color:#fff; margin-bottom:3.5mm;
+  text-shadow:0 1px 10px rgba(15,16,32,.55);
+}
+h1{
+  font-family:"Poppins",sans-serif; font-weight:800; font-size:29pt; line-height:1.04;
+  letter-spacing:-.028em;
+  text-shadow:0 1px 14px rgba(15,16,32,.34);
+}
+h1 em{ font-style:normal; color:#FFD9BE; }
+.sub{
+  margin-top:5mm; font-size:10.2pt; line-height:1.5; color:#fff; max-width:96mm;
+  text-shadow:0 1px 10px rgba(15,16,32,.42);
+}
+
+/* ---- lower band ---- */
+.body{ position:absolute; top:172mm; left:0; right:0; bottom:0;
+       padding:0 13mm; z-index:2; }
+
+.steps{ display:grid; grid-template-columns:repeat(4,1fr); gap:4.4mm; margin-top:5.5mm; }
+.st .n{
+  font-family:"Poppins",sans-serif; font-weight:700; font-size:15pt; line-height:1;
+  color:rgba(255,255,255,.34); margin-bottom:2.2mm;
+}
+.st h3{ font-family:"Poppins",sans-serif; font-weight:600; font-size:10pt;
+        margin-bottom:1.5mm; letter-spacing:-.01em; }
+.st p{ font-size:8.2pt; line-height:1.45; color:var(--dim); }
+
+.rule{ height:1px; background:rgba(255,255,255,.22); margin:6.5mm 0 6mm; }
+
+.who{ display:grid; grid-template-columns:repeat(3,1fr); gap:6mm; }
+.who h4{ font-family:"Poppins",sans-serif; font-weight:600; font-size:9.6pt;
+         margin-bottom:1.4mm; }
+.who h4 span{ color:var(--green); }
+.who p{ font-size:8.2pt; line-height:1.45; color:var(--dim); }
+
+/* ---- call to action, the only large orange element ---- */
+.proof{
+  margin-top:6.5mm;
+  background:rgba(255,255,255,.10);
+  border:1px solid rgba(255,255,255,.20);
+  border-radius:2mm;
+  padding:4.4mm 5.5mm;
+  display:grid; grid-template-columns:repeat(4,1fr); gap:5mm;
+}
+.proof .pf b{
+  display:block; font-family:"Poppins",sans-serif; font-weight:700;
+  font-size:10.4pt; letter-spacing:-.01em; margin-bottom:1.2mm; color:#fff;
+}
+.proof .pf span{ font-size:7.9pt; line-height:1.4; color:var(--dim); }
+
+.cta{
+  position:absolute; left:0; right:0; bottom:0;
+  background:var(--cream); color:var(--ink);
+  padding:6.5mm 13mm 6mm;
+  display:flex; align-items:center; justify-content:space-between;
+}
+.cta .l h5{
+  font-family:"Poppins",sans-serif; font-weight:800; font-size:15pt;
+  letter-spacing:-.02em; margin-bottom:1.8mm; color:var(--ink);
+}
+.cta .l p{ font-size:8.8pt; color:#5A5B6E; }
+.cta .l p{ color:#5A5B6E; }
+.btn{
+  display:inline-block; margin-top:3.4mm;
+  background:var(--orange); color:#fff;
+  font-family:"Poppins",sans-serif; font-weight:700; font-size:9.6pt;
+  letter-spacing:.05em; text-transform:uppercase;
+  padding:3.4mm 7mm; border-radius:1.6mm;
+}
+.cta .r{ text-align:right; font-size:9pt; line-height:1.85; color:var(--ink); }
+.cta .r .w{ font-family:"Poppins",sans-serif; font-weight:700; font-size:10.6pt;
+            color:var(--indigo); }
+.cta .r .a{ font-size:7.6pt; color:#7A7B8C; line-height:1.5; margin-top:1.6mm; }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="hero">
+    <img src="art4k/hero-student-print.jpg" alt="Student using StudyAI">
+    <div class="scrim"></div>
+  </div>
+
+  <div class="mast">
+    <img src="Eazy-learn-white.png" alt="Eazy-Learn">
+    <div class="tag">StudyAI</div>
+  </div>
+
+  <div class="head">
+    <div class="kicker"><span class="bar"></span>Study smarter, not longer</div>
+    <h1>She just revised<br>a whole term<br><em>in one evening.</em></h1>
+    <p class="sub">
+      StudyAI turns your teacher's own lesson notes into flashcards, quiz
+      questions and study guides. Same syllabus. Same teacher. Far less
+      guessing about what to revise.
+    </p>
+  </div>
+
+  <div class="body">
+    <div class="steps">
+      <div class="st"><div class="n">1</div><h3>Teacher uploads</h3>
+        <p>The lesson note they already wrote goes in as it is.</p></div>
+      <div class="st"><div class="n">2</div><h3>StudyAI builds</h3>
+        <p>Flashcards, questions and a study guide, in minutes.</p></div>
+      <div class="st"><div class="n">3</div><h3>Teacher approves</h3>
+        <p>Nothing reaches a pupil until a teacher has checked it.</p></div>
+      <div class="st"><div class="n">4</div><h3>Pupils revise</h3>
+        <p>Weak topics come back more often, until they stick.</p></div>
+    </div>
+
+    <div class="rule"></div>
+
+    <div class="who">
+      <div><h4>For <span>teachers</span></h4>
+        <p>Hours of preparation returned to you every single week.</p></div>
+      <div><h4>For <span>pupils</span></h4>
+        <p>One clear screen: what to revise, and which exam is next.</p></div>
+      <div><h4>For <span>schools</span></h4>
+        <p>Every class, every teacher and every naira of AI spend, visible.</p></div>
+    </div>
+
+    <div class="proof">
+      <div class="pf"><b>One note in</b><span>A full study pack out</span></div>
+      <div class="pf"><b>Minutes</b><span>Not another lost evening</span></div>
+      <div class="pf"><b>Teacher approved</b><span>Before any pupil sees it</span></div>
+      <div class="pf"><b>Set monthly cap</b><span>Costs never run away</span></div>
+    </div>
+  </div>
+
+  <div class="cta">
+    <div class="l">
+      <h5>Book a free demo for your school</h5>
+      <p>We will set it up with your own subjects and classes.</p>
+      <div class="btn">Call +234 (0) 814 175 2518</div>
+    </div>
+    <div class="r">
+      <div class="w">www.eazy-learn.com</div>
+      <div>hello@eazy-learn.com</div>
+      <div class="a">Moshood Abiola Rd, Garki Area 1,<br>Abuja, Federal Capital Territory</div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>
