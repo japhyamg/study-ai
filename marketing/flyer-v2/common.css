@@ -1,0 +1,168 @@
+/* ===========================================================================
+   StudyAI flyer, shared layout.
+   Single page, A4 portrait, print spec. Colour is injected per variant.
+   Type: Poppins (display) + Arimo (text) for the brand variant; overridden
+   in the green variant. No em dashes anywhere in the copy.
+   =========================================================================== */
+
+@font-face{font-family:"Poppins";src:url("fonts/poppins-latin-400-normal.woff2") format("woff2");font-weight:400;font-display:block;}
+@font-face{font-family:"Poppins";src:url("fonts/poppins-latin-500-normal.woff2") format("woff2");font-weight:500;font-display:block;}
+@font-face{font-family:"Poppins";src:url("fonts/poppins-latin-600-normal.woff2") format("woff2");font-weight:600;font-display:block;}
+@font-face{font-family:"Poppins";src:url("fonts/poppins-latin-700-normal.woff2") format("woff2");font-weight:700;font-display:block;}
+@font-face{font-family:"Poppins";src:url("fonts/poppins-latin-800-normal.woff2") format("woff2");font-weight:800;font-display:block;}
+@font-face{font-family:"Arimo";src:url("fonts/arimo-latin-400-normal.woff2") format("woff2");font-weight:400;font-display:block;}
+@font-face{font-family:"Arimo";src:url("fonts/arimo-latin-500-normal.woff2") format("woff2");font-weight:500;font-display:block;}
+@font-face{font-family:"Arimo";src:url("fonts/arimo-latin-600-normal.woff2") format("woff2");font-weight:600;font-display:block;}
+@font-face{font-family:"Arimo";src:url("fonts/arimo-latin-700-normal.woff2") format("woff2");font-weight:700;font-display:block;}
+@font-face{font-family:"Fraunces";src:url("fonts/fraunces-latin-400-normal.woff2") format("woff2");font-weight:400;font-display:block;}
+@font-face{font-family:"Fraunces";src:url("fonts/fraunces-latin-600-normal.woff2") format("woff2");font-weight:600;font-display:block;}
+@font-face{font-family:"Fraunces";src:url("fonts/fraunces-latin-700-normal.woff2") format("woff2");font-weight:700;font-display:block;}
+@font-face{font-family:"Geist";src:url("fonts/geist-sans-latin-400-normal.woff2") format("woff2");font-weight:400;font-display:block;}
+@font-face{font-family:"Geist";src:url("fonts/geist-sans-latin-500-normal.woff2") format("woff2");font-weight:500;font-display:block;}
+@font-face{font-family:"Geist";src:url("fonts/geist-sans-latin-600-normal.woff2") format("woff2");font-weight:600;font-display:block;}
+
+*{margin:0;padding:0;box-sizing:border-box;}
+@page{ size:A4; margin:0; }
+html,body{ background:#7d7d7d; }
+
+.page{
+  width:210mm; height:297mm;
+  background:var(--paper);
+  color:var(--ink);
+  font-family:var(--ff-text);
+  font-size:9.5pt; line-height:1.5;
+  position:relative; overflow:hidden;
+  margin:0 auto;
+  -webkit-font-smoothing:antialiased;
+}
+
+/* ---------------- top band ---------------- */
+.band{
+  background:var(--band-bg);
+  color:var(--band-fg);
+  padding:7mm 14mm 7.5mm;
+  position:relative;
+  overflow:hidden;
+}
+.band .brandrow{
+  display:flex; align-items:center; justify-content:space-between;
+  margin-bottom:6.5mm; position:relative; z-index:2;
+}
+.logoslot{ display:flex; align-items:center; gap:3.4mm; }
+.logoslot img{ height:11mm; width:auto; display:block; }
+.logofallback{
+  font-family:var(--ff-display); font-weight:800; font-size:14pt;
+  letter-spacing:-0.02em; color:var(--band-fg); line-height:1;
+}
+.logofallback .dash{ color:var(--accent); }
+.logosub{
+  font-family:var(--ff-text); font-size:6.6pt; letter-spacing:0.26em;
+  text-transform:uppercase; color:var(--band-fg-dim); margin-top:1.4mm;
+}
+.pill{
+  border:1px solid var(--band-rule);
+  color:var(--band-fg-dim);
+  font-size:7pt; letter-spacing:0.2em; text-transform:uppercase;
+  padding:2.1mm 4.4mm; border-radius:20mm; font-weight:600;
+}
+
+.band h1{
+  font-family:var(--ff-display); font-weight:800;
+  font-size:30pt; line-height:1.03; letter-spacing:-0.028em;
+  max-width:172mm; position:relative; z-index:2;
+}
+.band h1 .hl{ color:var(--accent); }
+.band .sub{
+  margin-top:4.5mm; max-width:150mm; font-size:9.9pt; line-height:1.48;
+  color:var(--band-fg-dim); position:relative; z-index:2;
+}
+
+/* decorative geometry, kept extremely restrained */
+.band .deco{
+  position:absolute; right:-26mm; top:-30mm;
+  width:96mm; height:96mm; border-radius:50%;
+  border:1.6mm solid var(--band-deco); opacity:.5; z-index:1;
+}
+.band .deco2{
+  position:absolute; right:14mm; bottom:-40mm;
+  width:56mm; height:56mm; border-radius:50%;
+  background:var(--band-deco); opacity:.32; z-index:1;
+}
+
+/* ---------------- hero art ---------------- */
+.herowrap{ padding:0 14mm; margin-top:5.5mm; }
+.heroart{
+  width:100%; display:block; border-radius:2mm;
+}
+.herocap{
+  display:flex; justify-content:space-between; align-items:baseline;
+  margin-top:2.5mm; font-size:8pt; color:var(--muted);
+}
+.herocap b{ color:var(--ink); font-weight:600; }
+
+/* ---------------- steps ---------------- */
+.steps{
+  display:grid; grid-template-columns:repeat(4,1fr); gap:5mm;
+  padding:0 14mm; margin-top:6mm;
+}
+.step{ text-align:left; }
+.step .num{
+  font-family:var(--ff-display); font-weight:700; font-size:8pt;
+  color:var(--accent); letter-spacing:.14em; margin-bottom:2.4mm;
+}
+.step img{ width:11mm; height:11mm; display:block; margin-bottom:2.6mm; }
+.step h3{
+  font-family:var(--ff-display); font-weight:600; font-size:10.5pt;
+  letter-spacing:-0.012em; margin-bottom:1.6mm; color:var(--ink);
+}
+.step p{ font-size:8.4pt; line-height:1.48; color:var(--muted); }
+
+/* ---------------- audience strip ---------------- */
+.who{
+  margin:5.5mm 14mm 0; padding:4.5mm 0 0;
+  border-top:1px solid var(--rule);
+  display:grid; grid-template-columns:repeat(3,1fr); gap:7mm;
+}
+.who .col{ display:flex; gap:3.6mm; }
+.who .col img{ width:9.5mm; height:9.5mm; flex:0 0 9.5mm; }
+.who h4{
+  font-family:var(--ff-display); font-weight:600; font-size:10pt;
+  margin-bottom:1.5mm; color:var(--ink);
+}
+.who p{ font-size:8.3pt; line-height:1.46; color:var(--muted); }
+
+/* ---------------- proof numbers ---------------- */
+.proof{
+  margin:5mm 14mm 0;
+  background:var(--proof-bg);
+  padding:5mm 6mm;
+  display:grid; grid-template-columns:repeat(3,1fr); gap:6mm;
+  border-radius:2mm;
+}
+.proof .p{ }
+.proof .k{
+  font-family:var(--ff-display); font-weight:700; font-size:12.5pt;
+  line-height:1; color:var(--proof-k); letter-spacing:-0.02em;
+}
+.proof .v{ margin-top:2mm; font-size:8.2pt; line-height:1.45; color:var(--proof-v); }
+
+/* ---------------- footer ---------------- */
+.foot{
+  position:absolute; left:0; right:0; bottom:0;
+  background:var(--foot-bg); color:var(--foot-fg);
+  padding:5.5mm 14mm 5mm;
+  display:flex; justify-content:space-between; align-items:flex-start;
+}
+.foot .cta h5{
+  font-family:var(--ff-display); font-weight:700; font-size:13pt;
+  letter-spacing:-0.015em; margin-bottom:1.6mm;
+}
+.foot .cta p{ font-size:8.4pt; color:var(--foot-dim); margin-bottom:3.4mm; }
+.foot .contact{ text-align:right; font-size:8.4pt; line-height:1.7; }
+.foot .contact a, .foot .contact span{ color:var(--foot-fg); text-decoration:none; display:block; }
+.foot .contact .site{ color:var(--accent); font-weight:700; font-size:9.4pt; }
+.foot .byline{
+  position:absolute; left:14mm; bottom:2.6mm;
+  font-size:6.4pt; letter-spacing:.16em; text-transform:uppercase;
+  color:var(--foot-dim);
+}

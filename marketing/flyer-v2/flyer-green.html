@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>StudyAI flyer, green</title>
+<link rel="stylesheet" href="common.css">
+<style>
+/* Variant B: deep academic green, chalk paper, brass accent.
+   Fraunces (display) + Geist (text). Aimed at a mixed audience of
+   schools, teachers and parents. */
+:root{
+  --paper:#FFFFFF;
+  --ink:#14211A;
+  --muted:#54604F;
+  --rule:#DFE2D8;
+  --accent:#B98A2E;
+
+  --band-bg:#14532D;
+  --band-fg:#FFFFFF;
+  --band-fg-dim:#CBDBD0;
+  --band-rule:rgba(255,255,255,.34);
+  --band-deco:#1F6B3C;
+
+  --proof-bg:#F2F5EF;
+  --proof-k:#14532D;
+  --proof-v:#4A5548;
+
+  --foot-bg:#0F1A13;
+  --foot-fg:#FFFFFF;
+  --foot-dim:#93A197;
+
+  --ff-display:"Fraunces", Georgia, serif;
+  --ff-text:"Geist", system-ui, sans-serif;
+}
+/* Fraunces runs larger than Poppins at the same size. */
+.band h1{ font-size:28pt; letter-spacing:-0.02em; }
+.proof .k{ font-size:12pt; }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="band">
+    <div class="deco"></div>
+    <div class="deco2"></div>
+
+    <div class="brandrow">
+      <div class="logoslot">
+        <!-- LOGO SLOT: drop Eazy-learn.png in this folder and it appears here.
+             Falls back to a typeset wordmark if the file is absent. -->
+        <img src="Eazy-learn.png" alt="Eazy-Learn"
+             onerror="this.style.display='none';document.getElementById('lf').style.display='block'">
+        <div>
+          <div class="logofallback" id="lf" style="display:none">EAZY<span class="dash">-</span>LEARN</div>
+          <div class="logosub">A product of Eazy-Learn</div>
+        </div>
+      </div>
+      <div class="pill">StudyAI</div>
+    </div>
+
+    <h1>Every lesson note<br>you already wrote,<br><span class="hl">worth three times more.</span></h1>
+    <p class="sub">
+      StudyAI turns the notes a teacher already has into flashcards, quiz
+      questions and study guides. Teachers stay in charge of every word, and
+      pupils get revision material that actually fits what they were taught.
+    </p>
+  </div>
+
+  <div class="herowrap">
+    <img class="heroart" src="art_print/hero-green-band.png" alt="One note becomes a full study pack">
+    <div class="herocap">
+      <span><b>One note in.</b> A full study pack out.</span>
+      <span>Flashcards, questions, study guides, images</span>
+    </div>
+  </div>
+
+  <div class="steps">
+    <div class="step">
+      <div class="num">STEP 1</div>
+      <img src="art_print/g-step-1.png" alt="">
+      <h3>Start with a note</h3>
+      <p>Use the lesson material that already exists. There is nothing extra to write.</p>
+    </div>
+    <div class="step">
+      <div class="num">STEP 2</div>
+      <img src="art_print/g-step-2.png" alt="">
+      <h3>Let it build</h3>
+      <p>Flashcards, quiz questions and a study guide are drafted in a couple of minutes.</p>
+    </div>
+    <div class="step">
+      <div class="num">STEP 3</div>
+      <img src="art_print/g-step-3.png" alt="">
+      <h3>A teacher checks it</h3>
+      <p>Every draft is read and approved by a teacher before anyone else sees it.</p>
+    </div>
+    <div class="step">
+      <div class="num">STEP 4</div>
+      <img src="art_print/g-step-4.png" alt="">
+      <h3>Pupils revise better</h3>
+      <p>Cards come back more often for the topics a pupil keeps getting wrong.</p>
+    </div>
+  </div>
+
+  <div class="who">
+    <div class="col">
+      <img src="art_print/g-icon-teacher.png" alt="">
+      <div>
+        <h4>Teachers</h4>
+        <p>Less time preparing, more time actually teaching the class.</p>
+      </div>
+    </div>
+    <div class="col">
+      <img src="art_print/g-icon-student.png" alt="">
+      <div>
+        <h4>Pupils</h4>
+        <p>One clear screen showing what to revise and which exam comes next.</p>
+      </div>
+    </div>
+    <div class="col">
+      <img src="art_print/g-icon-leader.png" alt="">
+      <div>
+        <h4>Schools</h4>
+        <p>Full visibility of every class, every teacher and every naira spent.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="proof">
+    <div class="p">
+      <div class="k">Built in minutes</div>
+      <div class="v">A full set of revision material from notes that already exist.</div>
+    </div>
+    <div class="p">
+      <div class="k">A teacher always approves</div>
+      <div class="v">Nothing is published to pupils until a teacher has read and approved it.</div>
+    </div>
+    <div class="p">
+      <div class="k">Costs stay predictable</div>
+      <div class="v">The school sets a monthly limit per teacher and the system holds to it.</div>
+    </div>
+  </div>
+
+  <div class="foot">
+    <div class="cta">
+      <h5>Book a free walkthrough</h5>
+      <p>We will load your own subjects and show you the whole thing.</p>
+    </div>
+    <div class="contact">
+      <span class="site">www.eazy-learn.com</span>
+      <a href="mailto:hello@eazy-learn.com">hello@eazy-learn.com</a>
+      <span>+234 (0) 814 175 2518</span>
+    </div>
+    <div class="byline">Moshood Abiola Rd, Garki Area 1, Abuja, FCT</div>
+  </div>
+
+</div>
+</body>
+</html>
