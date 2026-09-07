@@ -93,15 +93,15 @@ h1 em{ font-style:normal; color:#FFD9BE; }
 
 .grid{ display:grid; grid-template-columns:repeat(2,1fr); gap:4.2mm 8mm; }
 .it{ display:flex; gap:3.2mm; }
-.it .tick{
-  flex:0 0 4.6mm; height:4.6mm; margin-top:.6mm; border-radius:50%;
-  background:var(--green); position:relative;
+.it .ic{
+  flex:0 0 9mm; width:9mm; height:9mm; margin-top:.1mm;
+  border-radius:2mm;
+  background:rgba(255,255,255,.16);
+  border:1px solid rgba(255,255,255,.30);
+  display:flex; align-items:center; justify-content:center;
+  color:var(--green);
 }
-.it .tick::after{
-  content:""; position:absolute; left:1.5mm; top:1.1mm;
-  width:1.5mm; height:2.4mm; border:solid #10331F; border-width:0 .55mm .55mm 0;
-  transform:rotate(42deg);
-}
+.it .ic svg{ width:5.6mm; height:5.6mm; display:block; }
 .it h3{ font-family:"Poppins",sans-serif; font-weight:600; font-size:9.8pt;
         margin-bottom:1.2mm; letter-spacing:-.01em; }
 .it p{ font-size:8.2pt; line-height:1.45; color:var(--dim); }
@@ -176,22 +176,22 @@ h1 em{ font-style:normal; color:#FFD9BE; }
     <div class="lead">What a proprietor actually gets: <span>control, not another subscription you cannot see.</span></div>
 
     <div class="grid">
-      <div class="it"><div class="tick"></div><div>
+      <div class="it"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3.4 7.6a2 2 0 0 1 2-2h11.1a2 2 0 0 1 2 2"/><path d="M3.4 7.6v9.6a2 2 0 0 0 2 2h13.2a2 2 0 0 0 2-2v-2.2"/><path d="M20.6 10.2v4.8h-4.1a2.4 2.4 0 0 1 0-4.8z"/><path d="M6.4 5.6V4.2"/></svg></div><div>
         <h3>A hard cap on AI spend</h3>
         <p>Set a monthly limit per teacher. The system enforces it automatically, so the bill cannot surprise you.</p></div></div>
-      <div class="it"><div class="tick"></div><div>
+      <div class="it"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.9l7.6 2.8v5.4c0 4.8-3.3 8-7.6 9.2-4.3-1.2-7.6-4.4-7.6-9.2V5.7z"/><path d="M8.9 11.9l2.2 2.2 4-4"/></svg></div><div>
         <h3>Nothing published unchecked</h3>
         <p>Every generated question stays a draft until one of your teachers reads and approves it.</p></div></div>
-      <div class="it"><div class="tick"></div><div>
+      <div class="it"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3.6" y="3.6" width="7.2" height="7.2" rx="1.3"/><rect x="13.2" y="3.6" width="7.2" height="4.6" rx="1.3"/><rect x="3.6" y="13.2" width="7.2" height="7.2" rx="1.3"/><rect x="13.2" y="10.6" width="7.2" height="9.8" rx="1.3"/></svg></div><div>
         <h3>One dashboard for the school</h3>
         <p>Every class, every teacher, every subject and every naira spent, on one screen.</p></div></div>
-      <div class="it"><div class="tick"></div><div>
+      <div class="it"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.4"/><path d="M12 7.2V12l3.1 1.9"/></svg></div><div>
         <h3>More teaching, less preparing</h3>
         <p>Teachers keep the hours they used to lose to typing revision material by hand.</p></div></div>
-      <div class="it"><div class="tick"></div><div>
+      <div class="it"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 7.4C10.1 5.9 7.5 5.4 4.4 5.6v12.2c3.1-.2 5.7.3 7.6 1.8"/><path d="M12 7.4c1.9-1.5 4.5-2 7.6-1.8v12.2c-3.1-.2-5.7.3-7.6 1.8"/><path d="M12 7.4v12"/></svg></div><div>
         <h3>Your syllabus, your teachers</h3>
         <p>Built from your own notes, so it matches what your school actually teaches.</p></div></div>
-      <div class="it"><div class="tick"></div><div>
+      <div class="it"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3.8 16.6 9 11.4l3.4 3.4 7-7"/><path d="M14.6 7.8h4.8v4.8"/></svg></div><div>
         <h3>Something to show parents</h3>
         <p>Structured revision material for every class, and exam results you can point to.</p></div></div>
     </div>
