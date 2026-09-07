@@ -46,10 +46,11 @@ html,body{ background:#7d7d7d; }
 }
 .band .brandrow{
   display:flex; align-items:center; justify-content:space-between;
-  margin-bottom:6.5mm; position:relative; z-index:2;
+  margin-bottom:5.5mm; position:relative; z-index:2;
 }
 .logoslot{ display:flex; align-items:center; gap:3.4mm; }
-.logoslot img{ height:11mm; width:auto; display:block; }
+.logoslot img{ margin-top:0; }
+.logoslot img{ height:12mm; width:auto; display:block; }
 .logofallback{
   font-family:var(--ff-display); font-weight:800; font-size:14pt;
   letter-spacing:-0.02em; color:var(--band-fg); line-height:1;
@@ -62,7 +63,7 @@ html,body{ background:#7d7d7d; }
 .pill{
   border:1px solid var(--band-rule);
   color:var(--band-fg-dim);
-  font-size:7pt; letter-spacing:0.2em; text-transform:uppercase;
+  font-size:7.4pt; letter-spacing:0.22em; text-transform:uppercase;
   padding:2.1mm 4.4mm; border-radius:20mm; font-weight:600;
 }
 

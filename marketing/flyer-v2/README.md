@@ -34,13 +34,17 @@ way when editing; use commas, full stops or "and".
 
 ## The logo
 
-`flyer-brand.html` and `flyer-green.html` both reference `Eazy-learn.png` in
-this folder. If the file is missing the layout falls back to a typeset
-`EAZY-LEARN` wordmark, so the flyer never breaks.
+The real Eazy-Learn mark is in place, taken from eazy-learn.com.
 
-**To use the real logo:** drop `Eazy-learn.png` into this folder and
-re-render. A version with a transparent background works best, since both
-headers sit on a coloured band. The slot is sized to 11mm tall.
+- `Eazy-learn.png` is the original: orange diamond, black wordmark, transparent.
+- `Eazy-learn-white.png` recolours the black wordmark to white while keeping
+  the orange diamond, so the logo reads on the indigo and green header bands.
+  **This is the one both flyers use.**
+
+If you have a higher resolution or vector original, replace both files and
+re-render. The current raster is 1200px wide, which is comfortably sharp at
+the 12mm slot height. The layout still falls back to a typeset wordmark if
+the image is missing, so the flyer never breaks.
 
 ## Artwork
 
