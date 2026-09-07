@@ -57,6 +57,15 @@ html,body{ background:#6f6f6f; }
 .mast{ position:absolute; top:9mm; left:13mm; right:13mm;
        display:flex; align-items:flex-start; justify-content:space-between; z-index:3; }
 .mast img{ height:12mm; width:auto; display:block; }
+/* StudyAI wordmark: sized to match the Eazy-Learn logo optically
+   (25.0mm wide against the logo's 26.7mm) and coloured from the same
+   palette, white + orange, so the two lock up as a pair. */
+.samark{
+  font-family:"Poppins",sans-serif; font-weight:800;
+  font-size:18pt; line-height:1; letter-spacing:-.03em;
+  color:#FFFFFF; white-space:nowrap;
+}
+.samark i{ font-style:normal; color:#FF7425; }
 .tag{
   font-family:"Poppins",sans-serif; font-weight:600; font-size:7.2pt;
   letter-spacing:.22em; text-transform:uppercase; color:#fff;
@@ -155,7 +164,7 @@ h1 em{ font-style:normal; color:#FFD9BE; }
 
   <div class="mast">
     <img src="Eazy-learn-white.png" alt="Eazy-Learn">
-    <div class="tag">StudyAI</div>
+    <div class="samark">Study<i>AI</i></div>
   </div>
 
   <div class="head">
