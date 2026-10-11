@@ -1,0 +1,55 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><link rel="stylesheet" href="../screens.css"></head>
+<body>
+<div class="app-shell">
+  <aside class="app-side">
+    <div class="px-5 py-4" style="border-bottom:1px solid var(--line)">
+      <div class="font-display text-xl" style="color:var(--ink)">Study<span style="color:var(--accent)">AI</span></div>
+      <div class="text-xs faint mt-1">Demo School</div>
+    </div>
+    <nav class="flex-1 px-3 py-4">
+      <div class="nav-section">Learn</div>
+      <a class="nav-link">Dashboard</a>
+      <a class="nav-link">Exams</a>
+      <a class="nav-link">Materials</a>
+      <a class="nav-link">Flashcards</a>
+      <a class="nav-link nav-link-active">Study</a>
+      <a class="nav-link">Topics</a>
+    </nav>
+    <div class="px-3 py-3" style="border-top:1px solid var(--line)">
+      <div class="px-3 py-2 text-xs">
+        <div class="font-medium text-ink">Chidi Nwosu</div>
+        <div class="faint text-xs" style="text-transform:uppercase;letter-spacing:.05em">Student</div>
+      </div>
+    </div>
+  </aside>
+  <div class="app-content">
+    <header class="app-top">
+      <h1 class="font-display text-xl" style="color:var(--ink)">Study Session</h1>
+      <span class="badge badge-accent">Quadratic Equations &amp; the Discriminant</span>
+    </header>
+    <main class="app-main">
+      <a class="text-xs text-accent">← Study sets</a>
+      <div class="flex items-center justify-between mt-3 mb-4">
+        <span class="text-sm muted">Card 3 of 8</span>
+        <div class="bar" style="width:180px"><span style="width:37%"></span></div>
+      </div>
+      <div class="flashcard surface" style="min-height:16rem;max-width:40rem;margin:0 auto">
+        <div style="display:flex;align-items:center;justify-content:center;min-height:16rem;text-align:center;padding:1.5rem">
+          <div>
+            <div class="text-xs faint mb-2" style="text-transform:uppercase;letter-spacing:.06em">Answer</div>
+            <div class="text-lg text-ink">Two complex conjugate roots.</div>
+          </div>
+        </div>
+      </div>
+      <div class="mt-2 text-center text-sm muted" style="max-width:40rem;margin-left:auto;margin-right:auto">Front: Discriminant &lt; 0 means?</div>
+      <div class="mt-4 grid grid-cols-4 gap-2" style="max-width:40rem;margin-left:auto;margin-right:auto">
+        <button class="btn btn-danger">Again</button>
+        <button class="btn btn-ghost">Hard</button>
+        <button class="btn btn-outline">Good</button>
+        <button class="btn btn-primary">Easy</button>
+      </div>
+      <div class="text-xs faint mt-3 text-center">Spaced repetition schedules each card. Cards you rate Again or Hard return sooner, until you know them.</div>
+    </main>
+  </div>
+</div>
+</body></html>
