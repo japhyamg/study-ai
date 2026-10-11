@@ -1,7 +1,11 @@
 # StudyAI product brochure (Eazy-Learn)
 
-Eight page, landscape A4 brochure. `StudyAI-Brochure.pdf` at the repo root is the built
-deliverable; this folder holds the full, editable source.
+Two built deliverables live at the repo root:
+
+- `StudyAI-Brochure.pdf` — full 8-page **landscape** A4 brochure.
+- `StudyAI-Brochure-3page.pdf` — 3-page **portrait** A4 print summary.
+
+This folder holds the editable source for both.
 
 The dashboards on each page are 1:1 captures of the real product UI (see `screens/`),
 rendered from the app's own design system (`resources/css/app.css`), then framed in
@@ -24,6 +28,8 @@ Requires the Chromium toolchain used elsewhere in `marketing/` (playwright-core 
     LD_LIBRARY_PATH=$PWD/libs:$PWD/libs/lib node shoot.js
     # 2. re-build the PDF + per-page PNGs
     LD_LIBRARY_PATH=$PWD/libs:$PWD/libs/lib node render.js
+    # 3. re-build the 3-page portrait print summary
+    LD_LIBRARY_PATH=$PWD/libs:$PWD/libs/lib node render3.js
 
 Output: `StudyAI-Brochure.pdf` and `pages/p1..p8.png`.
 
